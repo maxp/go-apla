@@ -17,3 +17,7 @@ func (mh *MigrationHistory) Get() error {
 func (mh *MigrationHistory) Create() error {
 	return DBConn.Create(mh).Error
 }
+
+func (mh *MigrationHistory) Save() error {
+	return DBConn.Save(mh).Error
+}

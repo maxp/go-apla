@@ -24,6 +24,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/AplaProject/go-apla/packages/autoupdate"
+
 	"bytes"
 
 	"github.com/AplaProject/go-apla/packages/config/syspar"
@@ -40,7 +42,8 @@ import (
 )
 
 var (
-	log = logging.MustGetLogger("parser")
+	log     = logging.MustGetLogger("parser")
+	updater = autoupdate.NewUpdater("http://localhost:8090", "update.pub")
 )
 
 // GetTxTypeAndUserID returns tx type, wallet and citizen id from the block data
@@ -297,6 +300,7 @@ func InsertIntoBlockchain(transaction *model.DbTransaction, block *Block) error 
 		log.Errorf("can't create block: %s", err)
 		return err
 	}
+	updater.TryUpdate(blockID)
 	return nil
 }
 

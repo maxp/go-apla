@@ -39,6 +39,8 @@ import (
 	"github.com/AplaProject/go-apla/packages/consts"
 	"github.com/AplaProject/go-apla/packages/converter"
 	"github.com/AplaProject/go-apla/packages/crypto"
+	"github.com/EGaaS/go-egaas-mvp/packages/model"
+	"github.com/EGaaS/go-egaas-mvp/packages/utils"
 	"github.com/kardianos/osext"
 	"github.com/mcuadros/go-version"
 	"github.com/op/go-logging"
@@ -1023,4 +1025,16 @@ func GetTcpPort(config map[string]string) string {
 		return port
 	}
 	return consts.TCP_PORT
+}
+
+func Stop() {
+	log.Debug("Stop()")
+	log.Debug("DayLight Stop : %v", model.DBConn)
+
+	stopDaemons := &model.StopDaemon{StopTime: time.Now().Unix()}
+	err := stopDaemons.Create()
+	if err != nil {
+		log.Error("%v", utils.ErrInfo(err))
+	}
+	log.Debug("DayLight Stop")
 }

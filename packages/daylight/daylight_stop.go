@@ -15,28 +15,3 @@
 // along with the go-daylight library. If not, see <http://www.gnu.org/licenses/>.
 
 package daylight
-
-import (
-	"fmt"
-	"time"
-
-	"github.com/AplaProject/go-apla/packages/model"
-	"github.com/AplaProject/go-apla/packages/utils"
-)
-
-// Stop stops the program
-func Stop() {
-	log.Debug("Stop()")
-	IosLog("Stop()")
-	log.Debug("DayLight Stop : %v", model.DBConn)
-	IosLog("utils.DB:" + fmt.Sprintf("%v", model.DBConn))
-
-	stopDaemons := &model.StopDaemon{StopTime: time.Now().Unix()}
-	err := stopDaemons.Create()
-	if err != nil {
-		IosLog("err:" + fmt.Sprintf("%s", utils.ErrInfo(err)))
-		log.Error("%v", utils.ErrInfo(err))
-	}
-	log.Debug("DayLight Stop")
-	IosLog("DayLight Stop")
-}

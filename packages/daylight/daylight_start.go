@@ -19,7 +19,7 @@ package daylight
 import (
 	"encoding/json"
 	"fmt"
-	//	_ "image/png"
+
 	"io/ioutil"
 	"math/rand"
 	"net/http"
@@ -29,6 +29,9 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/AplaProject/go-apla/packages/autoupdate"
+	version "github.com/hashicorp/go-version"
 
 	"github.com/AplaProject/go-apla/packages/apiv2"
 	"github.com/AplaProject/go-apla/packages/config"
@@ -250,6 +253,32 @@ func initRoutes(listenHost, browserHost string) string {
 	return browserHost
 }
 
+func Update() error {
+	updater := autoupdate.NewUpdater("http://localhost:8090", "update.pub")
+	err := updater.CheckUpdates("update.pub")
+	if err != nil {
+		return err
+	}
+	updater.TryUpdate(-1)
+	vers, err := version.NewVersion(consts.VERSION)
+	if err != nil {
+		return err
+	}
+	err = updater.Migrate(vers)
+	if err != nil {
+		return err
+	}
+
+	go func() {
+		err := updater.CheckUpdates("update.pub")
+		if err != nil {
+			log.Error(err.Error())
+		}
+		time.Sleep(time.Hour)
+	}()
+	return nil
+}
+
 // Start starts the main code of the program
 func Start(dir string, thrustWindowLoder *window.Window) {
 
@@ -291,6 +320,11 @@ func Start(dir string, thrustWindowLoder *window.Window) {
 			log.Error("can't read system parameters: %s", utils.ErrInfo(err))
 			Exit(1)
 		}
+	}
+
+	err = Update()
+	if err != nil {
+		log.Fatal("can't update software: ", err)
 	}
 
 	// create first block

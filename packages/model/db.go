@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -13,9 +12,9 @@ import (
 	"github.com/AplaProject/go-apla/packages/consts"
 	"github.com/AplaProject/go-apla/packages/converter"
 	"github.com/AplaProject/go-apla/packages/crypto"
+	"github.com/AplaProject/go-apla/packages/migration"
 	logging "github.com/op/go-logging"
 
-	"github.com/AplaProject/go-apla/packages/static"
 	"github.com/AplaProject/go-apla/packages/utils"
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/postgres"
@@ -94,31 +93,18 @@ func GetRecordsCount(tableName string) (int64, error) {
 }
 
 func ExecSchemaEcosystem(id int, wallet int64, name string) error {
-	schema, err := static.Asset("static/schema-ecosystem-v2.sql")
-	if err != nil {
-		return err
-	}
-	err = DBConn.Exec(fmt.Sprintf(string(schema), id, wallet, name)).Error
+	err := DBConn.Exec(fmt.Sprintf(migration.SchemaEcosystem, id, wallet, name)).Error
 	if err != nil {
 		return err
 	}
 	if id == 1 {
-		schema, err = static.Asset("static/schema-firstecosystem-v2.sql")
-		if err != nil {
-			return err
-		}
-		err = DBConn.Exec(fmt.Sprintf(string(schema), wallet)).Error
+		err = DBConn.Exec(fmt.Sprintf(migration.SchemaFirstEcosystem, wallet)).Error
 	}
 	return err
 }
 
 func ExecSchema() error {
-	schema, err := static.Asset("static/schema-v2.sql")
-	if err != nil {
-		os.Remove(*utils.Dir + "/config.ini")
-		return err
-	}
-	return DBConn.Exec(string(schema)).Error
+	return DBConn.Exec(migration.Schema).Error
 }
 
 func GetColumnsCount(tableName string) (int64, error) {
