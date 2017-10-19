@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/AplaProject/go-apla/packages/config"
 	"github.com/AplaProject/go-apla/packages/config/syspar"
@@ -30,6 +31,7 @@ import (
 	"github.com/AplaProject/go-apla/packages/model"
 	"github.com/AplaProject/go-apla/packages/parser"
 	"github.com/AplaProject/go-apla/packages/utils"
+	"github.com/EGaaS/go-egaas-mvp/packages/consts"
 )
 
 type installResult struct {
@@ -104,6 +106,10 @@ func installCommon(data *installParams) (err error) {
 	}
 	install := &model.Install{Progress: "complete"}
 	if err = install.Create(); err != nil {
+		return err
+	}
+	migration := &model.MigrationHistory{Version: consts.VERSION, DateApplied: time.Now().Unix()}
+	if err = migration.Create(); err != nil {
 		return err
 	}
 	if _, err = os.Stat(*utils.FirstBlockDir + "/1block"); len(*utils.FirstBlockDir) > 0 && os.IsNotExist(err) {

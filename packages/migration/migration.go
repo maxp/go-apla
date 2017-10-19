@@ -1,5 +1,12 @@
 package migration
 
+import (
+	"time"
+
+	"github.com/AplaProject/go-apla/packages/model"
+	version "github.com/hashicorp/go-version"
+)
+
 var (
 	SchemaEcosystem = `DROP TABLE IF EXISTS "%[1]d_keys"; CREATE TABLE "%[1]d_keys" (
 	"id" bigint  NOT NULL DEFAULT '0',
@@ -977,26 +984,58 @@ var (
 		);
 		ALTER SEQUENCE upd_full_nodes_id_seq owned by upd_full_nodes.id;
 		ALTER TABLE ONLY "upd_full_nodes" ADD CONSTRAINT upd_full_nodes_pkey PRIMARY KEY (id);
+
+		DROP TABLE IF EXISTS "migration"; CREATE TABLE "migration" (
+			"version" varchar(100)  NOT NULL DEFAULT ''
+			);
 		`
 )
 
-var VersionedMigrations map[string]string
+type migrationData struct {
+	vers      *version.Version
+	migration string
+}
+
+var versionedMigrations []migrationData
 
 func init() {
-	VersionedMigrations = make(map[string]string, 0)
+	versionedMigrations = make([]migrationData, 0)
+	/*
+		version1, _ := version.NewVersion("1.0.1")
+		migration1 := migrationData{version1, `CREATE TABLE "migration_test" (
+			"name" varchar(100)  NOT NULL DEFAULT '',
+			"permissions" jsonb,
+			"columns" jsonb,
+			"conditions" text  NOT NULL DEFAULT '',
+			"rb_id" bigint NOT NULL DEFAULT '0'
+			);`}
 
-	VersionedMigrations["1.0.1"] = `CREATE TABLE "migration_test" (
-		"name" varchar(100)  NOT NULL DEFAULT '',
-		"permissions" jsonb,
-		"columns" jsonb,
-		"conditions" text  NOT NULL DEFAULT '',
-		"rb_id" bigint NOT NULL DEFAULT '0'
-		);`
-	VersionedMigrations["2.0.1"] = `CREATE TABLE "migrations_test_2" (
-		"name" varchar(100)  NOT NULL DEFAULT '',
-		"permissions" jsonb,
-		"columns" jsonb,
-		"conditions" text  NOT NULL DEFAULT '',
-		"rb_id" bigint NOT NULL DEFAULT '0'
-		);`
+		version2, _ := version.NewVersion("2.0.1")
+		migration2 := migrationData{version2, `CREATE TABLE "migrations_test_2" (
+			"name" varchar(100)  NOT NULL DEFAULT '',
+			"permissions" jsonb,
+			"columns" jsonb,
+			"conditions" text  NOT NULL DEFAULT '',
+			"rb_id" bigint NOT NULL DEFAULT '0'
+			);`}
+	*/
+	versionedMigrations = append(versionedMigrations, migration1)
+	versionedMigrations = append(versionedMigrations, migration2)
+}
+
+func Migrate(vers *version.Version) err {
+	for _, migration := range versionedMigrations {
+		if migration.Vers.LessThan(vers) {
+			err := model.DBConn.Exec(migration.migration)
+			if err != nil {
+				return err
+			}
+			dbMigration := &model.MigrationHistory{Version: migration.vers.String(), DateApplied: time.Date().Now()}
+			err = dbMigration.Save()
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
