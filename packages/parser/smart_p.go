@@ -100,6 +100,7 @@ var (
 		"CreateTable":       100,
 		"RollbackTable":     100,
 		"PermTable":         100,
+		"CreateLocalData":   100,
 		"ColumnCondition":   50,
 		"CreateColumn":      50,
 		"RollbackColumn":    50,
@@ -173,6 +174,7 @@ func init() {
 		"FindEcosystem":      FindEcosystem,
 		"CreateEcosystem":    CreateEcosystem,
 		"RollbackEcosystem":  RollbackEcosystem,
+		"CreateLocalData":    CreateLocalData,
 		"CreateTable":        CreateTable,
 		"RollbackTable":      RollbackTable,
 		"PermTable":          PermTable,
@@ -388,7 +390,11 @@ func (p *Parser) CallContract(flags int) (err error) {
 			}
 			payWallet.SetTablePrefix(p.TxSmart.TokenEcosystem)
 			if err = payWallet.Get(fromID); err != nil {
-				return err
+				if err == gorm.ErrRecordNotFound {
+					return fmt.Errorf(`current balance is not enough`)
+				} else {
+					return err
+				}
 			}
 			if !bytes.Equal(wallet.PublicKey, payWallet.PublicKey) && !bytes.Equal(p.TxSmart.PublicKey, payWallet.PublicKey) {
 				return fmt.Errorf(`Token and user public keys are different`)
@@ -1528,6 +1534,29 @@ func RollbackEcosystem(p *Parser) error {
 	if converter.StrToInt64(rollbackTx.TableID) != lastID {
 		return fmt.Errorf(`Incorrect ecosystem id %s != %d`, rollbackTx.TableID, lastID)
 	}
+	if model.IsTable(fmt.Sprintf(`%d_local_tables`, rollbackTx.TableID)) {
+		// Drop all _local_ tables
+		table := &model.Table{}
+		prefix := fmt.Sprintf(`%d_local`, rollbackTx.TableID)
+		table.SetTablePrefix(prefix)
+		list, err := table.GetAll(prefix)
+		if err != nil {
+			return err
+		}
+		for _, item := range list {
+			err = model.DropTable(p.DbTransaction, fmt.Sprintf("%s_%s", prefix, item.Name))
+			if err != nil {
+				return err
+			}
+		}
+		for _, name := range []string{`tables`, `parameters`} {
+			err = model.DropTable(p.DbTransaction, fmt.Sprintf("%s_%s", prefix, name))
+			if err != nil {
+				return err
+			}
+		}
+	}
+
 	for _, name := range []string{`menu`, `pages`, `languages`, `signatures`, `tables`,
 		`contracts`, `parameters`, `blocks`, `history`, `keys`} {
 		err = model.DropTable(p.DbTransaction, fmt.Sprintf("%s_%s", rollbackTx.TableID, name))
@@ -1924,4 +1953,15 @@ func PermColumn(p *Parser, tableName, name, permissions string) error {
 	_, _, err = p.selectiveLoggingAndUpd([]string{`columns`}, []interface{}{string(permout)},
 		tables, []string{`name`}, []string{tableName}, true)
 	return err
+}
+
+// CreateLocalData creates local data tables
+func CreateLocalData(p *Parser, wallet int64, name string) error {
+	if p.TxContract.Name != `@1LocalData` {
+		return fmt.Errorf(`CreateLocalData can be only called from @1LocalData`)
+	}
+	if model.IsTable(fmt.Sprintf(`%d_local_tables`, p.TxSmart.StateID)) {
+		return fmt.Errorf(`LocalData already exists`)
+	}
+	return model.ExecSchemaLocalData(int(p.TxSmart.StateID), wallet)
 }
