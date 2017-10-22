@@ -362,7 +362,7 @@ func (p *Parser) CallContract(flags int) (err error) {
 		}
 		if p.TxSmart.StateID > 0 {
 			if p.TxSmart.TokenEcosystem == 0 {
-				p.TxSmart.TokenEcosystem = p.TxSmart.StateID
+				p.TxSmart.TokenEcosystem = 1
 			}
 			fuelRate, err = decimal.NewFromString(syspar.GetFuelRate(p.TxSmart.TokenEcosystem))
 			if err != nil {
@@ -1237,7 +1237,10 @@ func DBSelect(p *Parser, tblname string, columns string, id int64, order string,
 	if ecosystem == 0 {
 		ecosystem = p.TxSmart.StateID
 	}
-	tblname = fmt.Sprintf(`%d_%s`, ecosystem, tblname)
+	if tblname[0] < '1' || tblname[0] > '9' || !strings.Contains(tblname, `_`) {
+		tblname = fmt.Sprintf(`%d_%s`, ecosystem, tblname)
+	}
+
 	rows, err = model.DBConn.Table(tblname).Select(columns).Where(where, params...).Order(order).
 		Offset(offset).Limit(limit).Rows()
 	if err != nil {
@@ -1514,6 +1517,13 @@ func CreateEcosystem(p *Parser, wallet int64, name string) (int64, error) {
 		return 0, err
 	}
 	err = model.ExecSchemaEcosystem(converter.StrToInt(id), wallet, name)
+	if err != nil {
+		return 0, err
+	}
+	err = smart.LoadContract(p.DbTransaction, id)
+	if err != nil {
+		return 0, err
+	}
 	return converter.StrToInt64(id), err
 }
 
