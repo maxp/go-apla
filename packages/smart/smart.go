@@ -57,6 +57,7 @@ const (
 
 var (
 	smartVM   *script.VM
+	smartVDE  map[int64]*script.VM
 	smartTest = make(map[string]string)
 	log       = logging.MustGetLogger("daemons")
 )
@@ -72,6 +73,7 @@ func GetTestValue(name string) string {
 
 func init() {
 	smartVM = script.NewVM()
+	smartVDE = make(map[int64]*script.VM)
 	smartVM.Extern = true
 	smartVM.Extend(&script.ExtendData{Objects: map[string]interface{}{
 		"Println": fmt.Println,
@@ -94,34 +96,118 @@ func init() {
 	return
 }*/
 
+func vmExternOff(vm *script.VM) {
+	vm.FlushExtern()
+}
+
+func vmCompile(vm *script.VM, src string, owner *script.OwnerInfo) error {
+	return vm.Compile([]rune(src), owner)
+}
+
+func vmCompileBlock(vm *script.VM, src string, owner *script.OwnerInfo) (*script.Block, error) {
+	return vm.CompileBlock([]rune(src), owner)
+}
+
+func vmCompileEval(vm *script.VM, src string, prefix uint32) error {
+	return vm.CompileEval(src, prefix)
+}
+
+func vmEvalIf(vm *script.VM, src string, state uint32, extend *map[string]interface{}) (bool, error) {
+	return vm.EvalIf(src, state, extend)
+}
+
+func vmFlushBlock(vm *script.VM, root *script.Block) {
+	vm.FlushBlock(root)
+}
+
+func vmExtend(vm *script.VM, ext *script.ExtendData) {
+	vm.Extend(ext)
+}
+
+func vmRun(vm *script.VM, block *script.Block, params []interface{}, extend *map[string]interface{}) (ret []interface{}, err error) {
+	var extcost int64
+	cost := script.CostDefault
+	if ecost, ok := (*extend)[`txcost`]; ok {
+		cost = ecost.(int64)
+	}
+	rt := vm.RunInit(cost)
+	ret, err = rt.Run(block, params, extend)
+	if ecost, ok := (*extend)[`txcost`]; ok && cost > ecost.(int64) {
+		extcost = cost - ecost.(int64)
+	}
+	(*extend)[`txcost`] = rt.Cost() - extcost
+	return
+}
+
+func vmGetContract(vm *script.VM, name string, state uint32) *Contract {
+	name = script.StateName(state, name)
+	obj, ok := vm.Objects[name]
+	if ok && obj.Type == script.ObjContract {
+		return &Contract{Name: name, Block: obj.Value.(*script.Block)}
+	}
+	return nil
+}
+
+func vmGetUsedContracts(vm *script.VM, name string, state uint32, full bool) []string {
+	contract := vmGetContract(vm, name, state)
+	if contract == nil || contract.Block.Info.(*script.ContractInfo).Used == nil {
+		return nil
+	}
+	ret := make([]string, 0)
+	used := make(map[string]bool)
+	for key := range contract.Block.Info.(*script.ContractInfo).Used {
+		ret = append(ret, key)
+		used[key] = true
+		if full {
+			sub := vmGetUsedContracts(vm, key, state, full)
+			for _, item := range sub {
+				if _, ok := used[item]; !ok {
+					ret = append(ret, item)
+					used[item] = true
+				}
+			}
+		}
+	}
+	return ret
+}
+
+func vmGetContractByID(vm *script.VM, id int32) *Contract {
+	idcont := id // - CNTOFF
+	if len(vm.Children) <= int(idcont) || vm.Children[idcont].Type != script.ObjContract {
+		return nil
+	}
+	return &Contract{Name: vm.Children[idcont].Info.(*script.ContractInfo).Name,
+		Block: vm.Children[idcont]}
+}
+
 // ExternOff switches off the extern compiling mode in smartVM
 func ExternOff() {
-	smartVM.FlushExtern()
+	vmExternOff(smartVM)
 }
 
 // Compile compiles contract source code in smartVM
 func Compile(src string, owner *script.OwnerInfo) error {
-	return smartVM.Compile([]rune(src), owner)
+	return vmCompile(smartVM, src, owner)
 }
 
 // CompileBlock calls CompileBlock for smartVM
 func CompileBlock(src string, owner *script.OwnerInfo) (*script.Block, error) {
-	return smartVM.CompileBlock([]rune(src), owner)
+	return vmCompileBlock(smartVM, src, owner)
 }
 
 // CompileEval calls CompileEval for smartVM
 func CompileEval(src string, prefix uint32) error {
-	return smartVM.CompileEval(src, prefix)
+	return vmCompileEval(smartVM, src, prefix)
 }
 
 // EvalIf calls EvalIf for smartVM
 func EvalIf(src string, state uint32, extend *map[string]interface{}) (bool, error) {
-	return smartVM.EvalIf(src, state, extend)
+	return vmEvalIf(smartVM, src, state, extend)
 }
 
 // FlushBlock calls FlushBlock for smartVM
 func FlushBlock(root *script.Block) {
-	smartVM.FlushBlock(root)
+	vmFlushBlock(smartVM, root)
 }
 
 // ExtendCost sets the cost of calling extended obj in smartVM
@@ -135,23 +221,12 @@ func FuncCallsDB(funcCallsDB map[string]struct{}) {
 
 // Extend set extended variable and functions in smartVM
 func Extend(ext *script.ExtendData) {
-	smartVM.Extend(ext)
+	vmExtend(smartVM, ext)
 }
 
 // Run executes Block in smartVM
 func Run(block *script.Block, params []interface{}, extend *map[string]interface{}) (ret []interface{}, err error) {
-	var extcost int64
-	cost := script.CostDefault
-	if ecost, ok := (*extend)[`txcost`]; ok {
-		cost = ecost.(int64)
-	}
-	rt := smartVM.RunInit(cost)
-	ret, err = rt.Run(block, params, extend)
-	if ecost, ok := (*extend)[`txcost`]; ok && cost > ecost.(int64) {
-		extcost = cost - ecost.(int64)
-	}
-	(*extend)[`txcost`] = rt.Cost() - extcost
-	return
+	return vmRun(smartVM, block, params, extend)
 }
 
 // ActivateContract sets Active status of the contract in smartVM
@@ -168,46 +243,17 @@ func ActivateContract(tblid, state int64, active bool) {
 
 // GetContract returns true if the contract exists in smartVM
 func GetContract(name string, state uint32) *Contract {
-	name = script.StateName(state, name)
-	obj, ok := smartVM.Objects[name]
-	if ok && obj.Type == script.ObjContract {
-		return &Contract{Name: name, Block: obj.Value.(*script.Block)}
-	}
-	return nil
+	return vmGetContract(smartVM, name, state)
 }
 
 // GetUsedContracts returns the list of contracts which are called from the specified contract
 func GetUsedContracts(name string, state uint32, full bool) []string {
-	contract := GetContract(name, state)
-	if contract == nil || contract.Block.Info.(*script.ContractInfo).Used == nil {
-		return nil
-	}
-	ret := make([]string, 0)
-	used := make(map[string]bool)
-	for key := range contract.Block.Info.(*script.ContractInfo).Used {
-		ret = append(ret, key)
-		used[key] = true
-		if full {
-			sub := GetUsedContracts(key, state, full)
-			for _, item := range sub {
-				if _, ok := used[item]; !ok {
-					ret = append(ret, item)
-					used[item] = true
-				}
-			}
-		}
-	}
-	return ret
+	return vmGetUsedContracts(smartVM, name, state, full)
 }
 
 // GetContractByID returns true if the contract exists
 func GetContractByID(id int32) *Contract {
-	idcont := id // - CNTOFF
-	if len(smartVM.Children) <= int(idcont) || smartVM.Children[idcont].Type != script.ObjContract {
-		return nil
-	}
-	return &Contract{Name: smartVM.Children[idcont].Info.(*script.ContractInfo).Name,
-		Block: smartVM.Children[idcont]}
+	return vmGetContractByID(smartVM, id)
 }
 
 // GetFunc returns the block of the specified function in the contract
@@ -303,7 +349,40 @@ func LoadContract(transaction *model.DbTransaction, prefix string) (err error) {
 			//return
 		} else {
 			fmt.Println("OK Load Contract", names, item[`id`], item[`active`] == `1`)
+			LoadVDEContracts(transaction, prefix)
 		}
 	}
+	return
+}
+
+func LoadVDEContracts(transaction *model.DbTransaction, prefix string) (err error) {
+	//	var contracts []map[string]string
+
+	if !model.IsTable(prefix + `_vde_contracts`) {
+		return
+	}
+	/*	contracts, err = model.GetAllTransaction(transaction, `select * from "`+prefix+`_local_contracts" order by id`, -1)
+		if err != nil {
+			return err
+		}
+		state := uint32(converter.StrToInt64(prefix))
+		for _, item := range contracts {
+			names := strings.Join(ContractsList(item[`value`]), `,`)
+			owner := script.OwnerInfo{
+				StateID:  state,
+				Active:   item[`active`] == `1`,
+				TableID:  converter.StrToInt64(item[`id`]),
+				WalletID: converter.StrToInt64(item[`wallet_id`]),
+				TokenID:  converter.StrToInt64(item[`token_id`]),
+			}
+			if err = Compile(item[`value`], &owner); err != nil {
+				log.Error("Load Contract", names, err)
+				fmt.Println("Error Load Contract", names, err)
+				//return
+			} else {
+				fmt.Println("OK Load Contract", names, item[`id`], item[`active`] == `1`)
+				LoadLocalContracts(transaction, prefix)
+			}
+		}*/
 	return
 }

@@ -100,7 +100,6 @@ var (
 		"CreateTable":       100,
 		"RollbackTable":     100,
 		"PermTable":         100,
-		"CreateLocalData":   100,
 		"ColumnCondition":   50,
 		"CreateColumn":      50,
 		"RollbackColumn":    50,
@@ -174,7 +173,6 @@ func init() {
 		"FindEcosystem":      FindEcosystem,
 		"CreateEcosystem":    CreateEcosystem,
 		"RollbackEcosystem":  RollbackEcosystem,
-		"CreateLocalData":    CreateLocalData,
 		"CreateTable":        CreateTable,
 		"RollbackTable":      RollbackTable,
 		"PermTable":          PermTable,
@@ -1963,15 +1961,4 @@ func PermColumn(p *Parser, tableName, name, permissions string) error {
 	_, _, err = p.selectiveLoggingAndUpd([]string{`columns`}, []interface{}{string(permout)},
 		tables, []string{`name`}, []string{tableName}, true)
 	return err
-}
-
-// CreateLocalData creates local data tables
-func CreateLocalData(p *Parser, wallet int64, name string) error {
-	if p.TxContract.Name != `@1LocalData` {
-		return fmt.Errorf(`CreateLocalData can be only called from @1LocalData`)
-	}
-	if model.IsTable(fmt.Sprintf(`%d_local_tables`, p.TxSmart.StateID)) {
-		return fmt.Errorf(`LocalData already exists`)
-	}
-	return model.ExecSchemaLocalData(int(p.TxSmart.StateID), wallet)
 }

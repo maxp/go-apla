@@ -314,13 +314,8 @@ func parseContractTransaction(p *Parser, buf *bytes.Buffer) error {
 	p.TxTime = smartTx.Time
 	p.TxStateID = uint32(smartTx.StateID)
 	p.TxStateIDStr = converter.UInt32ToStr(p.TxStateID)
-	if p.TxStateID > 0 {
-		p.TxCitizenID = smartTx.UserID
-		p.TxWalletID = 0
-	} else {
-		p.TxCitizenID = 0
-		p.TxWalletID = smartTx.UserID
-	}
+	p.TxCitizenID = smartTx.UserID
+	p.TxWalletID = smartTx.UserID
 
 	contract := smart.GetContractByID(int32(smartTx.Type))
 	if contract == nil {

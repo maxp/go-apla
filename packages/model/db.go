@@ -113,7 +113,7 @@ func ExecSchemaEcosystem(id int, wallet int64, name string) error {
 }
 
 func ExecSchemaLocalData(id int, wallet int64) error {
-	schema, err := static.Asset("static/schema-localdata.sql")
+	schema, err := static.Asset("static/schema-vde.sql")
 	if err != nil {
 		return err
 	}
@@ -383,7 +383,7 @@ func CreateIndex(transaction *DbTransaction, indexName, tableName, onColumn stri
 func IsTable(tblname string) bool {
 	var name string
 	DBConn.Table("information_schema.tables").
-		Where("table_type = 'BASE TABLE' AND table_schema NOT IN ('pg_catalog', 'information_schema') AND table_name=?`", tblname).
+		Where("table_type = 'BASE TABLE' AND table_schema NOT IN ('pg_catalog', 'information_schema') AND table_name=?", tblname).
 		Select("table_name").Row().Scan(&name)
 
 	return name == tblname
