@@ -29,6 +29,8 @@ import (
 	"github.com/AplaProject/go-apla/packages/config"
 	"github.com/AplaProject/go-apla/packages/converter"
 	"github.com/AplaProject/go-apla/packages/model"
+	"github.com/AplaProject/go-apla/packages/script"
+	"github.com/AplaProject/go-apla/packages/smart"
 	"github.com/AplaProject/go-apla/packages/utils"
 	"github.com/AplaProject/go-apla/packages/utils/tx"
 	"github.com/dgrijalva/jwt-go"
@@ -46,6 +48,8 @@ type apiData struct {
 	result interface{}
 	params map[string]interface{}
 	state  int64
+	vde    bool
+	vm     *script.VM
 	wallet int64
 	token  *jwt.Token
 	//	sess   session.SessionStore
@@ -110,7 +114,11 @@ func errorAPI(w http.ResponseWriter, err interface{}, code int, params ...interf
 }
 
 func getPrefix(data *apiData) (prefix string) {
-	return converter.Int64ToStr(data.state)
+	prefix = converter.Int64ToStr(data.state)
+	if data.vde {
+		prefix += `_vde`
+	}
+	return
 }
 
 func getSignHeader(txName string, data *apiData) tx.Header {
@@ -182,6 +190,16 @@ func DefaultHandler(params map[string]int, handlers ...apiHandle) hr.Handle {
 		data.params = make(map[string]interface{})
 		for _, par := range ps {
 			data.params[par.Key] = par.Value
+		}
+		if len(r.FormValue(`vde`)) > 0 {
+			data.vm = smart.GetVM(true, data.state)
+			if data.vm == nil {
+				errorAPI(w, `E_VDE`, http.StatusBadRequest, data.state)
+				return
+			}
+			data.vde = true
+		} else {
+			data.vm = smart.GetVM(false, 0)
 		}
 		for key, par := range params {
 			val := r.FormValue(key)

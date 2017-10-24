@@ -31,6 +31,9 @@ import (
 
 type contractResult struct {
 	Hash string `json:"hash"`
+	// These fields are used for VDE
+	Message string `json:"errmsg,omitempty"`
+	Result  string `json:"result,omitempty"`
 }
 
 func contract(w http.ResponseWriter, r *http.Request, data *apiData) error {
@@ -123,10 +126,19 @@ func contract(w http.ResponseWriter, r *http.Request, data *apiData) error {
 	if err != nil {
 		return errorAPI(w, err, http.StatusInternalServerError)
 	}
+	if data.vde {
+		ret, err := VDEContract(int64(info.ID), data.wallet,
+			append([]byte{128}, serializedData...))
+		if err != nil {
+			return errorAPI(w, err, http.StatusInternalServerError)
+		}
+		data.result = ret
+		return nil
+	}
 	if hash, err = model.SendTx(int64(info.ID), data.wallet,
 		append([]byte{128}, serializedData...)); err != nil {
 		return errorAPI(w, err, http.StatusInternalServerError)
 	}
-	data.result = &contractResult{Hash: hex.EncodeToString(hash)} // !!! string(converter.BinToHex(hash))}
+	data.result = &contractResult{Hash: hex.EncodeToString(hash)}
 	return nil
 }

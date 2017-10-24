@@ -31,20 +31,6 @@ import (
 	"github.com/AplaProject/go-apla/packages/smart"
 )
 
-/*
-type smartField struct {
-	Name string `json:"name"`
-	HTML string `json:"htmltype"`
-	Type string `json:"txtype"`
-	Tags string `json:"tags"`
-}
-
-type smartFieldsResult struct {
-	Fields []smartField `json:"fields"`
-	Name   string       `json:"name"`
-	Active bool         `json:"active"`
-}*/
-
 //SignRes contains the data of the signature
 type SignRes struct {
 	Param string `json:"name"`
@@ -70,7 +56,7 @@ type EncryptKey struct {
 
 func validateSmartContract(r *http.Request, data *apiData, result *prepareResult) (contract *smart.Contract, parerr interface{}, err error) {
 	cntname := data.params[`name`].(string)
-	contract = smart.GetContract(cntname, uint32(data.state))
+	contract = smart.GetContractVM(data.vm, cntname, uint32(data.state))
 	if contract == nil {
 		return nil, cntname, fmt.Errorf(`E_CONTRACT`) //fmt.Errorf(`there is not %s contract`, cntname)
 	}
@@ -82,9 +68,9 @@ func validateSmartContract(r *http.Request, data *apiData, result *prepareResult
 			}
 			if strings.Contains(fitem.Tags, `signature`) && result != nil {
 				if ret := regexp.MustCompile(`(?is)signature:([\w_\d]+)`).FindStringSubmatch(fitem.Tags); len(ret) == 2 {
-					pref := getPrefix(data)
 					var value string
-					value, err = model.Single(fmt.Sprintf(`select value from "%s_signatures" where name=?`, pref), ret[1]).String()
+					value, err = model.Single(fmt.Sprintf(`select value from "%s_signatures" where name=?`,
+						getPrefix(data)), ret[1]).String()
 					if err != nil {
 						break
 					}

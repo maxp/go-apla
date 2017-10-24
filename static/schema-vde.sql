@@ -123,13 +123,13 @@ INSERT INTO "%[1]d_vde_tables" ("name", "permissions","columns", "conditions") V
 INSERT INTO "%[1]d_vde_contracts" ("id", "value", "conditions") VALUES 
 ('1','contract MainCondition {
   conditions {
-    if(StateVal("founder_account")!=$wallet)
+    if(EcosystemParam("founder_account")!=$wallet)
     {
       warning "Sorry, you don`t have access to this action."
     }
   }
 }', 'ContractConditions(`MainCondition`)'),
-('2','contract LocalFunctions {
+('2','contract VDEFunctions {
 }
 
 func DBFind(table string).Columns(columns string).Where(where string, params ...)

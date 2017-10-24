@@ -17,11 +17,14 @@
 package apiv2
 
 import (
+	"encoding/hex"
 	"fmt"
 	"net/http"
 
 	"github.com/AplaProject/go-apla/packages/converter"
+	"github.com/AplaProject/go-apla/packages/crypto"
 	"github.com/AplaProject/go-apla/packages/model"
+	"github.com/AplaProject/go-apla/packages/smart"
 )
 
 type vdeCreateResult struct {
@@ -29,8 +32,8 @@ type vdeCreateResult struct {
 }
 
 func vdeCreate(w http.ResponseWriter, r *http.Request, data *apiData) error {
-	if model.IsTable(fmt.Sprintf(`%d_local_tables`, data.state)) {
-		return errorAPI(w, `E_LOCALCREATED`, http.StatusBadRequest)
+	if model.IsTable(fmt.Sprintf(`%d_vde_tables`, data.state)) {
+		return errorAPI(w, `E_VDECREATED`, http.StatusBadRequest)
 	}
 	sp := &model.StateParameter{}
 	if err := sp.SetTablePrefix(converter.Int64ToStr(data.state)).GetByName(`founder_account`); err != nil {
@@ -42,6 +45,17 @@ func vdeCreate(w http.ResponseWriter, r *http.Request, data *apiData) error {
 	if err := model.ExecSchemaLocalData(int(data.state), data.wallet); err != nil {
 		return errorAPI(w, err, http.StatusInternalServerError)
 	}
+	smart.LoadVDEContracts(nil, converter.Int64ToStr(data.state))
 	data.result = vdeCreateResult{Result: true}
 	return nil
+}
+
+func VDEContract(txType, wallet int64, data []byte) (result *contractResult, err error) {
+	hash, err := crypto.Hash(data)
+	if err != nil {
+		return
+	}
+	result = &contractResult{Hash: hex.EncodeToString(hash)}
+	fmt.Println(`VDECONTRACT`, *result)
+	return
 }

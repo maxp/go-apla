@@ -17,7 +17,11 @@
 package apiv2
 
 import (
+	"fmt"
+	"net/url"
 	"testing"
+
+	"github.com/AplaProject/go-apla/packages/crypto"
 )
 
 func TestVDECreate(t *testing.T) {
@@ -34,4 +38,17 @@ func TestVDECreate(t *testing.T) {
 		t.Error(err)
 		return
 	}
+
+	rnd := `rnd` + crypto.RandSeq(6)
+	form := url.Values{`Value`: {`contract ` + rnd + ` {
+		    data {
+				Par string
+			}
+			action { Test("active",  $Par)}}`}, `Conditions`: {`true`}, `vde`: {`true`}}
+
+	if err := postTx(`NewContract`, &form); err != nil {
+		t.Error(err)
+		return
+	}
+	fmt.Println(`OK`)
 }

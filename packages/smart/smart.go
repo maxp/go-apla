@@ -71,11 +71,10 @@ func GetTestValue(name string) string {
 	return smartTest[name]
 }
 
-func init() {
-	smartVM = script.NewVM()
-	smartVDE = make(map[int64]*script.VM)
-	smartVM.Extern = true
-	smartVM.Extend(&script.ExtendData{Objects: map[string]interface{}{
+func newVM() *script.VM {
+	vm := script.NewVM()
+	vm.Extern = true
+	vm.Extend(&script.ExtendData{Objects: map[string]interface{}{
 		"Println": fmt.Println,
 		"Sprintf": fmt.Sprintf,
 		"TxJson":  TxJSON,
@@ -85,6 +84,12 @@ func init() {
 	}, AutoPars: map[string]string{
 		`*smart.Contract`: `contract`,
 	}})
+	return vm
+}
+
+func init() {
+	smartVM = newVM()
+	smartVDE = make(map[int64]*script.VM)
 }
 
 /*func pref2state(prefix string) (state uint32) {
@@ -95,6 +100,16 @@ func init() {
 	}
 	return
 }*/
+
+func GetVM(vde bool, ecosystemID int64) *script.VM {
+	if vde {
+		if v, ok := smartVDE[ecosystemID]; ok {
+			return v
+		}
+		return nil
+	}
+	return smartVM
+}
 
 func vmExternOff(vm *script.VM) {
 	vm.FlushExtern()
@@ -139,7 +154,7 @@ func vmRun(vm *script.VM, block *script.Block, params []interface{}, extend *map
 	return
 }
 
-func vmGetContract(vm *script.VM, name string, state uint32) *Contract {
+func GetContractVM(vm *script.VM, name string, state uint32) *Contract {
 	name = script.StateName(state, name)
 	obj, ok := vm.Objects[name]
 	if ok && obj.Type == script.ObjContract {
@@ -149,7 +164,7 @@ func vmGetContract(vm *script.VM, name string, state uint32) *Contract {
 }
 
 func vmGetUsedContracts(vm *script.VM, name string, state uint32, full bool) []string {
-	contract := vmGetContract(vm, name, state)
+	contract := GetContractVM(vm, name, state)
 	if contract == nil || contract.Block.Info.(*script.ContractInfo).Used == nil {
 		return nil
 	}
@@ -178,6 +193,14 @@ func vmGetContractByID(vm *script.VM, id int32) *Contract {
 	}
 	return &Contract{Name: vm.Children[idcont].Info.(*script.ContractInfo).Name,
 		Block: vm.Children[idcont]}
+}
+
+func vmExtendCost(vm *script.VM, ext func(string) int64) {
+	vm.ExtCost = ext
+}
+
+func vmFuncCallsDB(vm *script.VM, funcCallsDB map[string]struct{}) {
+	vm.FuncCallsDB = funcCallsDB
 }
 
 // ExternOff switches off the extern compiling mode in smartVM
@@ -212,11 +235,11 @@ func FlushBlock(root *script.Block) {
 
 // ExtendCost sets the cost of calling extended obj in smartVM
 func ExtendCost(ext func(string) int64) {
-	smartVM.ExtCost = ext
+	vmExtendCost(smartVM, ext)
 }
 
 func FuncCallsDB(funcCallsDB map[string]struct{}) {
-	smartVM.FuncCallsDB = funcCallsDB
+	vmFuncCallsDB(smartVM, funcCallsDB)
 }
 
 // Extend set extended variable and functions in smartVM
@@ -243,7 +266,7 @@ func ActivateContract(tblid, state int64, active bool) {
 
 // GetContract returns true if the contract exists in smartVM
 func GetContract(name string, state uint32) *Contract {
-	return vmGetContract(smartVM, name, state)
+	return GetContractVM(smartVM, name, state)
 }
 
 // GetUsedContracts returns the list of contracts which are called from the specified contract
@@ -349,40 +372,42 @@ func LoadContract(transaction *model.DbTransaction, prefix string) (err error) {
 			//return
 		} else {
 			fmt.Println("OK Load Contract", names, item[`id`], item[`active`] == `1`)
-			LoadVDEContracts(transaction, prefix)
 		}
 	}
+	LoadVDEContracts(transaction, prefix)
 	return
 }
 
 func LoadVDEContracts(transaction *model.DbTransaction, prefix string) (err error) {
-	//	var contracts []map[string]string
+	var contracts []map[string]string
 
 	if !model.IsTable(prefix + `_vde_contracts`) {
 		return
 	}
-	/*	contracts, err = model.GetAllTransaction(transaction, `select * from "`+prefix+`_local_contracts" order by id`, -1)
-		if err != nil {
-			return err
+	contracts, err = model.GetAllTransaction(transaction, `select * from "`+prefix+`_vde_contracts" order by id`, -1)
+	if err != nil {
+		return err
+	}
+	state := converter.StrToInt64(prefix)
+	vm := newVM()
+	EmbedFuncs(vm)
+	smartVDE[state] = vm
+	for _, item := range contracts {
+		names := strings.Join(ContractsList(item[`value`]), `,`)
+		owner := script.OwnerInfo{
+			StateID:  uint32(state),
+			Active:   false,
+			TableID:  converter.StrToInt64(item[`id`]),
+			WalletID: 0,
+			TokenID:  0,
 		}
-		state := uint32(converter.StrToInt64(prefix))
-		for _, item := range contracts {
-			names := strings.Join(ContractsList(item[`value`]), `,`)
-			owner := script.OwnerInfo{
-				StateID:  state,
-				Active:   item[`active`] == `1`,
-				TableID:  converter.StrToInt64(item[`id`]),
-				WalletID: converter.StrToInt64(item[`wallet_id`]),
-				TokenID:  converter.StrToInt64(item[`token_id`]),
-			}
-			if err = Compile(item[`value`], &owner); err != nil {
-				log.Error("Load Contract", names, err)
-				fmt.Println("Error Load Contract", names, err)
-				//return
-			} else {
-				fmt.Println("OK Load Contract", names, item[`id`], item[`active`] == `1`)
-				LoadLocalContracts(transaction, prefix)
-			}
-		}*/
+		if err = vmCompile(vm, item[`value`], &owner); err != nil {
+			log.Error("Load VDE Contract", names, err)
+			fmt.Println("Error Load VDE Contract", names, err)
+		} else {
+			fmt.Println("OK Load VDE Contract", names, item[`id`])
+		}
+	}
+
 	return
 }
