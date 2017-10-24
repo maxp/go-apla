@@ -1005,7 +1005,7 @@ main:
 			}
 		case lexIdent:
 			objInfo, tobj := vm.findObj(lexem.Value.(string), block)
-			if objInfo == nil && (!vm.Extern || i >= len(*lexems)-2 || (*lexems)[i+1].Type != isLPar) {
+			if objInfo == nil && (!vm.Extern || i > *ind || i >= len(*lexems)-2 || (*lexems)[i+1].Type != isLPar) {
 				return fmt.Errorf(`unknown identifier %s`, lexem.Value.(string))
 			}
 			if i < len(*lexems)-2 {

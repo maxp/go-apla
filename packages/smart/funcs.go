@@ -26,12 +26,23 @@ import (
 	"github.com/AplaProject/go-apla/packages/model"
 	"github.com/AplaProject/go-apla/packages/script"
 	"github.com/AplaProject/go-apla/packages/templatev2"
+	"github.com/AplaProject/go-apla/packages/utils"
 	"github.com/AplaProject/go-apla/packages/utils/tx"
+
+	"github.com/shopspring/decimal"
 )
 
 type SmartContract struct {
-	vde     bool
-	TxSmart *tx.SmartContract
+	VDE        bool
+	VM         *script.VM
+	TxSmart    tx.SmartContract
+	TxData     map[string]interface{}
+	TxContract *Contract
+	TxCost     int64           // Maximum cost of executing contract
+	TxUsedCost decimal.Decimal // Used cost of CPU resources
+	BlockData  *utils.BlockData
+	TxHash     []byte
+	PublicKeys [][]byte
 }
 
 var (
@@ -39,7 +50,8 @@ var (
 		"DBSelect": struct{}{},
 	}
 	extendCost = map[string]int64{
-		"EcosystemParam": 10,
+		"EcosystemParam":    10,
+		"ValidateCondition": 30,
 	}
 )
 
@@ -52,13 +64,25 @@ func getCost(name string) int64 {
 
 func EmbedFuncs(vm *script.VM) {
 	vmExtend(vm, &script.ExtendData{Objects: map[string]interface{}{
-		"DBSelect":       DBSelect,
-		"EcosystemParam": EcosystemParam,
+		"DBSelect":          DBSelect,
+		"EcosystemParam":    EcosystemParam,
+		"ValidateCondition": ValidateCondition,
 	}, AutoPars: map[string]string{
-		`*SmartContract`: `sc`,
+		`*smart.SmartContract`: `sc`,
 	}})
 	vmExtendCost(vm, getCost)
 	vmFuncCallsDB(vm, funcCallsDB)
+}
+
+func getTableName(sc *SmartContract, tblname string, ecosystem int64) string {
+	if tblname[0] < '1' || tblname[0] > '9' || !strings.Contains(tblname, `_`) {
+		prefix := converter.Int64ToStr(ecosystem)
+		if sc.VDE {
+			prefix += `_vde`
+		}
+		tblname = fmt.Sprintf(`%s_%s`, prefix, tblname)
+	}
+	return tblname
 }
 
 // DBSelect returns an array of values of the specified columns when there is selection of data 'offset', 'limit', 'where'
@@ -91,9 +115,7 @@ func DBSelect(sc *SmartContract, tblname string, columns string, id int64, order
 	if ecosystem == 0 {
 		ecosystem = sc.TxSmart.StateID
 	}
-	if tblname[0] < '1' || tblname[0] > '9' || !strings.Contains(tblname, `_`) {
-		tblname = fmt.Sprintf(`%d_%s`, ecosystem, tblname)
-	}
+	tblname = getTableName(sc, tblname, ecosystem)
 
 	rows, err = model.DBConn.Table(tblname).Select(columns).Where(where, params...).Order(order).
 		Offset(offset).Limit(limit).Rows()
@@ -133,4 +155,12 @@ func DBSelect(sc *SmartContract, tblname string, columns string, id int64, order
 func EcosystemParam(sc *SmartContract, name string) string {
 	val, _ := templatev2.StateParam(sc.TxSmart.StateID, name)
 	return val
+}
+
+// ValidateCondition checks if the condition can be compiled
+func ValidateCondition(sc *SmartContract, condition string, state int64) error {
+	if len(condition) == 0 {
+		return fmt.Errorf("Conditions cannot be empty")
+	}
+	return VMCompileEval(sc.VM, condition, uint32(state))
 }
