@@ -20,7 +20,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/AplaProject/go-apla/packages/converter"
@@ -151,6 +150,7 @@ func InitSmartContract(sc *smart.SmartContract, data []byte) error {
 }
 
 func VDEContract(data []byte) (result *contractResult, err error) {
+	var ret string
 	hash, err := crypto.Hash(data)
 	if err != nil {
 		return
@@ -160,16 +160,8 @@ func VDEContract(data []byte) (result *contractResult, err error) {
 	sc := smart.SmartContract{VDE: true, TxHash: hash}
 	err = InitSmartContract(&sc, data)
 	if err == nil {
-		if err = sc.CallContract(smart.CallInit | smart.CallCondition | smart.CallAction); err == nil {
-			resVal := (*sc.TxContract.Extend)[`result`]
-			switch v := resVal.(type) {
-			case int64:
-				result.Result = strconv.FormatInt(v, 10)
-			case string:
-				result.Result = v
-			default:
-				err = fmt.Errorf("bad transaction result")
-			}
+		if ret, err = sc.CallContract(smart.CallInit | smart.CallCondition | smart.CallAction); err == nil {
+			result.Result = ret
 		}
 	}
 	if err != nil {

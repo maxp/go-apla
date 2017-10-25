@@ -183,6 +183,7 @@ func ConditionById(table string, validate bool) {
         root = CompileContract($Value, $state, 0, 0)
         id = DBInsert(`contracts`, `value,conditions`, $Value, $Conditions )
         FlushContract(root, id, false)
+        $result = id
     }
 }', 'ContractConditions(`MainCondition`)'),
 ('4','contract EditContract {
@@ -192,10 +193,12 @@ func ConditionById(table string, validate bool) {
     	Conditions string
     }
     conditions {
-        $cur = DBRow(`contracts`, `id,value,conditions`, $Id)
-        if Int($cur[`id`]) != $Id {
+        var row array
+        row = DBFind(`contracts`).Columns(`id,value,conditions`).WhereId($Id)
+        if !Len(row) {
             error Sprintf(`Contract %%d does not exist`, $Id)
         }
+        $cur = row[0]
         Eval($cur[`conditions`])
         ValidateCondition($Conditions,$state)
 	    var list, curlist array

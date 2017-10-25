@@ -21,13 +21,15 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/AplaProject/go-apla/packages/converter"
 	"github.com/AplaProject/go-apla/packages/crypto"
 )
 
 func TestVDECreate(t *testing.T) {
 	var (
-		err error
-		ret vdeCreateResult
+		err   error
+		retid int64
+		ret   vdeCreateResult
 	)
 	if err = keyLogin(1); err != nil {
 		t.Error(err)
@@ -44,9 +46,19 @@ func TestVDECreate(t *testing.T) {
 		    data {
 				Par string
 			}
-			action { Test("active",  $Par)}}`}, `Conditions`: {`true`}, `vde`: {`true`}}
+			action { Test("active",  $Par)}}`}, `Conditions`: {`ContractConditions("MainCondition")`}, `vde`: {`true`}}
 
-	if err := postTx(`NewContract`, &form); err != nil {
+	if retid, _, err = postTxResult(`NewContract`, &form); err != nil {
+		t.Error(err)
+		return
+	}
+	form = url.Values{`Id`: {converter.Int64ToStr(retid)}, `Value`: {`contract ` + rnd + ` {
+		data {
+			Par string
+		}
+		action { Test("active 5",  $Par)}}`}, `Conditions`: {`ContractConditions("MainCondition")`}, `vde`: {`true`}}
+
+	if err := postTx(`EditContract`, &form); err != nil {
 		t.Error(err)
 		return
 	}

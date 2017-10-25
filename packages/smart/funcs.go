@@ -20,12 +20,12 @@ import (
 	"database/sql"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/AplaProject/go-apla/packages/converter"
 	"github.com/AplaProject/go-apla/packages/model"
 	"github.com/AplaProject/go-apla/packages/script"
-	"github.com/AplaProject/go-apla/packages/templatev2"
 	"github.com/AplaProject/go-apla/packages/utils"
 	"github.com/AplaProject/go-apla/packages/utils/tx"
 
@@ -33,25 +33,36 @@ import (
 )
 
 type SmartContract struct {
-	VDE        bool
-	VM         *script.VM
-	TxSmart    tx.SmartContract
-	TxData     map[string]interface{}
-	TxContract *Contract
-	TxCost     int64           // Maximum cost of executing contract
-	TxUsedCost decimal.Decimal // Used cost of CPU resources
-	BlockData  *utils.BlockData
-	TxHash     []byte
-	PublicKeys [][]byte
+	VDE           bool
+	VM            *script.VM
+	TxSmart       tx.SmartContract
+	TxData        map[string]interface{}
+	TxContract    *Contract
+	TxCost        int64           // Maximum cost of executing contract
+	TxUsedCost    decimal.Decimal // Used cost of CPU resources
+	BlockData     *utils.BlockData
+	TxHash        []byte
+	PublicKeys    [][]byte
+	DbTransaction *model.DbTransaction
 }
 
 var (
 	funcCallsDB = map[string]struct{}{
+		"DBInsert": struct{}{},
 		"DBSelect": struct{}{},
+		"DBUpdate": struct{}{},
 	}
 	extendCost = map[string]int64{
-		"EcosystemParam":    10,
-		"ValidateCondition": 30,
+		"CompileContract":    100,
+		"ContractAccess":     50,
+		"ContractConditions": 50,
+		"ContractsList":      10,
+		"EcosystemParam":     10,
+		"Eval":               10,
+		"FlushContract":      50,
+		"IsContract":         10,
+		"Len":                5,
+		"ValidateCondition":  30,
 	}
 )
 
@@ -64,9 +75,19 @@ func getCost(name string) int64 {
 
 func EmbedFuncs(vm *script.VM) {
 	vmExtend(vm, &script.ExtendData{Objects: map[string]interface{}{
-		"DBSelect":          DBSelect,
-		"EcosystemParam":    EcosystemParam,
-		"ValidateCondition": ValidateCondition,
+		"CompileContract":    CompileContract,
+		"ContractAccess":     ContractAccess,
+		"ContractConditions": ContractConditions,
+		"ContractsList":      contractsList,
+		"DBInsert":           DBInsert,
+		"DBSelect":           DBSelect,
+		"DBUpdate":           DBUpdate,
+		"EcosystemParam":     EcosystemParam,
+		"Eval":               Eval,
+		"FlushContract":      FlushContract,
+		"IsContract":         IsContract,
+		"Len":                Len,
+		"ValidateCondition":  ValidateCondition,
 	}, AutoPars: map[string]string{
 		`*smart.SmartContract`: `sc`,
 	}})
@@ -85,6 +106,108 @@ func getTableName(sc *SmartContract, tblname string, ecosystem int64) string {
 	return tblname
 }
 
+func getDefTableName(sc *SmartContract, tblname string) string {
+	return getTableName(sc, tblname, sc.TxSmart.StateID)
+}
+
+func accessContracts(sc *SmartContract, names ...string) bool {
+	var prefix string
+	if !sc.VDE {
+		prefix = `@1`
+	} else {
+		prefix = fmt.Sprintf(`@%d`, sc.TxSmart.StateID)
+	}
+	for _, item := range names {
+		if sc.TxContract.Name == prefix+item {
+			return true
+		}
+	}
+	return false
+}
+
+func CompileContract(sc *SmartContract, code string, state, id, token int64) (interface{}, error) {
+	if !accessContracts(sc, `NewContract`, `EditContract`) {
+		return 0, fmt.Errorf(`CompileContract can be only called from NewContract or EditContract`)
+	}
+	return VMCompileBlock(sc.VM, code, &script.OwnerInfo{StateID: uint32(state), WalletID: id, TokenID: token})
+}
+
+// ContractAccess checks whether the name of the executable contract matches one of the names listed in the parameters.
+func ContractAccess(sc *SmartContract, names ...interface{}) bool {
+	for _, iname := range names {
+		switch name := iname.(type) {
+		case string:
+			if len(name) > 0 {
+				if name[0] != '@' {
+					name = fmt.Sprintf(`@%d`, sc.TxSmart.StateID) + name
+				}
+				if sc.TxContract.StackCont[len(sc.TxContract.StackCont)-1] == name {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// ContractConditions calls the 'conditions' function for each of the contracts specified in the parameters
+func ContractConditions(sc *SmartContract, names ...interface{}) (bool, error) {
+	for _, iname := range names {
+		name := iname.(string)
+		if len(name) > 0 {
+			contract := VMGetContract(sc.VM, name, uint32(sc.TxSmart.StateID))
+			if contract == nil {
+				contract = VMGetContract(sc.VM, name, 0)
+				if contract == nil {
+					return false, fmt.Errorf(`Unknown contract %s`, name)
+				}
+			}
+			block := contract.GetFunc(`conditions`)
+			if block == nil {
+				return false, fmt.Errorf(`There is not conditions in contract %s`, name)
+			}
+			_, err := VMRun(sc.VM, block, []interface{}{}, &map[string]interface{}{`state`: int64(sc.TxSmart.StateID),
+				`citizen`: sc.TxSmart.UserID, `wallet`: sc.TxSmart.UserID, `parser`: sc, `sc`: sc})
+			if err != nil {
+				return false, err
+			}
+		} else {
+			return false, fmt.Errorf(`empty contract name in ContractConditions`)
+		}
+	}
+	return true, nil
+}
+
+func contractsList(value string) []interface{} {
+	list := ContractsList(value)
+	result := make([]interface{}, len(list))
+	for i := 0; i < len(list); i++ {
+		result[i] = reflect.ValueOf(list[i]).Interface()
+	}
+	return result
+}
+
+// DBInsert inserts a record into the specified database table
+func DBInsert(sc *SmartContract, tblname string, params string, val ...interface{}) (qcost int64, ret int64, err error) {
+	tblname = getDefTableName(sc, tblname)
+	if err = sc.AccessTable(tblname, "insert"); err != nil {
+		return
+	}
+	var ind int
+	var lastID string
+	if ind, err = model.NumIndexes(tblname); err != nil {
+		return
+	}
+	qcost, lastID, err = sc.selectiveLoggingAndUpd(strings.Split(params, `,`), val, tblname, nil, nil, false)
+	if ind > 0 {
+		qcost *= int64(ind)
+	}
+	if err == nil {
+		ret, _ = strconv.ParseInt(lastID, 10, 64)
+	}
+	return
+}
+
 // DBSelect returns an array of values of the specified columns when there is selection of data 'offset', 'limit', 'where'
 func DBSelect(sc *SmartContract, tblname string, columns string, id int64, order string, offset, limit, ecosystem int64,
 	where string, params []interface{}) (int64, []interface{}, error) {
@@ -93,9 +216,6 @@ func DBSelect(sc *SmartContract, tblname string, columns string, id int64, order
 		err  error
 		rows *sql.Rows
 	)
-	/*	if err = checkReport(tblname); err != nil {
-		return 0, nil, err
-	}*/
 	if len(columns) == 0 {
 		columns = `*`
 	}
@@ -151,10 +271,68 @@ func DBSelect(sc *SmartContract, tblname string, columns string, id int64, order
 	return 0, result, nil
 }
 
+// DBUpdate updates the item with the specified id in the table
+func DBUpdate(sc *SmartContract, tblname string, id int64, params string, val ...interface{}) (qcost int64, err error) {
+	tblname = getDefTableName(sc, tblname)
+	if err = sc.AccessTable(tblname, "update"); err != nil {
+		return
+	}
+	if strings.Contains(tblname, `_reports_`) {
+		err = fmt.Errorf(`Access denied to report table`)
+		return
+	}
+	columns := strings.Split(params, `,`)
+	if err = sc.AccessColumns(tblname, columns); err != nil {
+		return
+	}
+	qcost, _, err = sc.selectiveLoggingAndUpd(columns, val, tblname, []string{`id`}, []string{converter.Int64ToStr(id)}, false)
+	return
+}
+
 // EcosystemParam returns the value of the specified parameter for the ecosystem
 func EcosystemParam(sc *SmartContract, name string) string {
-	val, _ := templatev2.StateParam(sc.TxSmart.StateID, name)
+	val, _ := model.Single(`SELECT value FROM "`+getDefTableName(sc, `parameters`)+`" WHERE name = ?`, name).String()
 	return val
+}
+
+// Eval evaluates the condition
+func Eval(sc *SmartContract, condition string) error {
+	if len(condition) == 0 {
+		return fmt.Errorf(`The condition is empty`)
+	}
+	ret, err := sc.EvalIf(condition)
+	if err != nil {
+		return err
+	}
+	if !ret {
+		return fmt.Errorf(`Access denied`)
+	}
+	return nil
+}
+
+func FlushContract(sc *SmartContract, iroot interface{}, id int64, active bool) error {
+	if !accessContracts(sc, `NewContract`, `EditContract`) {
+		return fmt.Errorf(`FlushContract can be only called from NewContract or EditContract`)
+	}
+	root := iroot.(*script.Block)
+	for i, item := range root.Children {
+		if item.Type == script.ObjContract {
+			root.Children[i].Info.(*script.ContractInfo).Owner.TableID = id
+			root.Children[i].Info.(*script.ContractInfo).Owner.Active = active
+		}
+	}
+	VMFlushBlock(sc.VM, root)
+	return nil
+}
+
+// IsContract returns true if there is teh specified contract
+func IsContract(sc *SmartContract, name string, state int64) bool {
+	return VMGetContract(sc.VM, name, uint32(state)) != nil
+}
+
+// Len returns the length of the slice
+func Len(in []interface{}) int64 {
+	return int64(len(in))
 }
 
 // ValidateCondition checks if the condition can be compiled

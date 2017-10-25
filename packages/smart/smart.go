@@ -17,8 +17,8 @@
 package smart
 
 import (
-	"bytes"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -125,7 +125,7 @@ func vmCompile(vm *script.VM, src string, owner *script.OwnerInfo) error {
 	return vm.Compile([]rune(src), owner)
 }
 
-func vmCompileBlock(vm *script.VM, src string, owner *script.OwnerInfo) (*script.Block, error) {
+func VMCompileBlock(vm *script.VM, src string, owner *script.OwnerInfo) (*script.Block, error) {
 	return vm.CompileBlock([]rune(src), owner)
 }
 
@@ -133,11 +133,11 @@ func VMCompileEval(vm *script.VM, src string, prefix uint32) error {
 	return vm.CompileEval(src, prefix)
 }
 
-func vmEvalIf(vm *script.VM, src string, state uint32, extend *map[string]interface{}) (bool, error) {
+func VMEvalIf(vm *script.VM, src string, state uint32, extend *map[string]interface{}) (bool, error) {
 	return vm.EvalIf(src, state, extend)
 }
 
-func vmFlushBlock(vm *script.VM, root *script.Block) {
+func VMFlushBlock(vm *script.VM, root *script.Block) {
 	vm.FlushBlock(root)
 }
 
@@ -160,7 +160,7 @@ func VMRun(vm *script.VM, block *script.Block, params []interface{}, extend *map
 	return
 }
 
-func GetContractVM(vm *script.VM, name string, state uint32) *Contract {
+func VMGetContract(vm *script.VM, name string, state uint32) *Contract {
 	name = script.StateName(state, name)
 	obj, ok := vm.Objects[name]
 	if ok && obj.Type == script.ObjContract {
@@ -170,7 +170,7 @@ func GetContractVM(vm *script.VM, name string, state uint32) *Contract {
 }
 
 func vmGetUsedContracts(vm *script.VM, name string, state uint32, full bool) []string {
-	contract := GetContractVM(vm, name, state)
+	contract := VMGetContract(vm, name, state)
 	if contract == nil || contract.Block.Info.(*script.ContractInfo).Used == nil {
 		return nil
 	}
@@ -221,7 +221,7 @@ func Compile(src string, owner *script.OwnerInfo) error {
 
 // CompileBlock calls CompileBlock for smartVM
 func CompileBlock(src string, owner *script.OwnerInfo) (*script.Block, error) {
-	return vmCompileBlock(smartVM, src, owner)
+	return VMCompileBlock(smartVM, src, owner)
 }
 
 // CompileEval calls CompileEval for smartVM
@@ -231,12 +231,12 @@ func CompileEval(src string, prefix uint32) error {
 
 // EvalIf calls EvalIf for smartVM
 func EvalIf(src string, state uint32, extend *map[string]interface{}) (bool, error) {
-	return vmEvalIf(smartVM, src, state, extend)
+	return VMEvalIf(smartVM, src, state, extend)
 }
 
 // FlushBlock calls FlushBlock for smartVM
 func FlushBlock(root *script.Block) {
-	vmFlushBlock(smartVM, root)
+	VMFlushBlock(smartVM, root)
 }
 
 // ExtendCost sets the cost of calling extended obj in smartVM
@@ -272,7 +272,7 @@ func ActivateContract(tblid, state int64, active bool) {
 
 // GetContract returns true if the contract exists in smartVM
 func GetContract(name string, state uint32) *Contract {
-	return GetContractVM(smartVM, name, state)
+	return VMGetContract(smartVM, name, state)
 }
 
 // GetUsedContracts returns the list of contracts which are called from the specified contract
@@ -471,33 +471,27 @@ func StackCont(sc interface{}, name string) {
 }
 
 // CallContract calls the contract functions according to the specified flags
-func (sc *SmartContract) CallContract(flags int) (err error) {
+func (sc *SmartContract) CallContract(flags int) (result string, err error) {
 	var (
-		public                     []byte
-		sizeFuel /*toID,*/, fromID int64
-		fuelRate                   decimal.Decimal
+		public          []byte
+		sizeFuel, price int64
 	)
-	payWallet := &model.Key{}
 	sc.TxContract.Extend = sc.getExtend()
-	var price int64
 
 	methods := []string{`init`, `conditions`, `action`, `rollback`}
 	sc.TxContract.StackCont = []string{sc.TxContract.Name}
 	(*sc.TxContract.Extend)[`stack_cont`] = StackCont
 	sc.VM = GetVM(sc.VDE, sc.TxSmart.StateID)
 	if (flags&CallRollback) == 0 && (flags&CallAction) != 0 {
-		/*if sc.BlockData != nil {
-			toID = sc.BlockData.WalletID
-		}*/
-		fromID = sc.TxSmart.UserID
+		// TODO: insert getting toID fromID from p.CallContract
 		if len(sc.TxSmart.PublicKey) > 0 && string(sc.TxSmart.PublicKey) != `null` {
 			public = sc.TxSmart.PublicKey
 		}
 		wallet := &model.Key{}
 		wallet.SetTablePrefix(sc.TxSmart.StateID)
-		err := wallet.Get(sc.TxSmart.UserID)
+		err = wallet.Get(sc.TxSmart.UserID)
 		if err != nil && err != gorm.ErrRecordNotFound {
-			return err
+			return
 		}
 		if len(wallet.PublicKey) > 0 {
 			public = wallet.PublicKey
@@ -505,83 +499,24 @@ func (sc *SmartContract) CallContract(flags int) (err error) {
 		if sc.TxSmart.Type == 258 { // UpdFullNodes
 			node := syspar.GetNode(sc.TxSmart.UserID)
 			if node == nil {
-				return fmt.Errorf("unknown node id")
+				return ``, fmt.Errorf("unknown node id")
 			}
 			public = node.Public
 		}
 		if len(public) == 0 {
-			return fmt.Errorf("empty public key")
+			return ``, fmt.Errorf("empty public key")
 		}
 		sc.PublicKeys = append(sc.PublicKeys, public)
 		//		fmt.Println(`CALL CONTRACT`, sc.TxData[`forsign`].(string))
 		CheckSignResult, err := utils.CheckSign(sc.PublicKeys, sc.TxData[`forsign`].(string), sc.TxSmart.BinSignatures, false)
 		if err != nil {
 			fmt.Println(`ForSign`, sc.TxData[`forsign`].(string))
-			return err
+			return ``, err
 		}
 		if !CheckSignResult {
-			return fmt.Errorf("incorrect sign")
+			return ``, fmt.Errorf("incorrect sign")
 		}
-		if sc.TxSmart.StateID > 0 {
-			if sc.TxSmart.TokenEcosystem == 0 {
-				sc.TxSmart.TokenEcosystem = 1
-			}
-			fuelRate, err = decimal.NewFromString(syspar.GetFuelRate(sc.TxSmart.TokenEcosystem))
-			if err != nil {
-				return err
-			}
-			if fuelRate.Cmp(decimal.New(0, 0)) <= 0 {
-				return fmt.Errorf(`Fuel rate must be greater than 0`)
-			}
-			if len(sc.TxSmart.PayOver) > 0 {
-				payOver, err := decimal.NewFromString(sc.TxSmart.PayOver)
-				if err != nil {
-					return err
-				}
-				fuelRate = fuelRate.Add(payOver)
-			}
-			if sc.TxContract.Block.Info.(*script.ContractInfo).Owner.Active {
-				fromID = sc.TxContract.Block.Info.(*script.ContractInfo).Owner.WalletID
-				sc.TxSmart.TokenEcosystem = sc.TxContract.Block.Info.(*script.ContractInfo).Owner.TokenID
-			} else if len(sc.TxSmart.PayOver) > 0 {
-				payOver, err := decimal.NewFromString(sc.TxSmart.PayOver)
-				if err != nil {
-					return err
-				}
-				fuelRate = fuelRate.Add(payOver)
-			}
-			payWallet.SetTablePrefix(sc.TxSmart.TokenEcosystem)
-			if err = payWallet.Get(fromID); err != nil {
-				if err == gorm.ErrRecordNotFound {
-					return fmt.Errorf(`current balance is not enough`)
-				}
-				return err
-			}
-			if !bytes.Equal(wallet.PublicKey, payWallet.PublicKey) && !bytes.Equal(sc.TxSmart.PublicKey, payWallet.PublicKey) {
-				return fmt.Errorf(`Token and user public keys are different`)
-			}
-			amount, err := decimal.NewFromString(payWallet.Amount)
-			if err != nil {
-				return err
-			}
-			if cprice := sc.TxContract.GetFunc(`price`); cprice != nil {
-				var ret []interface{}
-				if ret, err = VMRun(sc.VM, cprice, nil, sc.TxContract.Extend); err != nil {
-					return err
-				} else if len(ret) == 1 {
-					if _, ok := ret[0].(int64); !ok {
-						return fmt.Errorf(`Wrong result type of price function`)
-					}
-					price = ret[0].(int64)
-				} else {
-					return fmt.Errorf(`Wrong type of price function`)
-				}
-			}
-			sizeFuel = syspar.GetSizeFuel() * int64(len(sc.TxSmart.Data)) / 1024
-			if amount.Cmp(decimal.New(sizeFuel+price, 0).Mul(fuelRate)) <= 0 {
-				return fmt.Errorf(`current balance is not enough`)
-			}
-		}
+		// TODO: Insert calculating balance from p.CallContract	if sc.TxSmart.StateID > 0
 	}
 	before := (*sc.TxContract.Extend)[`txcost`].(int64) + price
 
@@ -605,31 +540,378 @@ func (sc *SmartContract) CallContract(flags int) (err error) {
 	}
 	sc.TxUsedCost = decimal.New(before-(*sc.TxContract.Extend)[`txcost`].(int64), 0)
 	sc.TxContract.TxPrice = price
-	/*	if (flags&CallAction) != 0 && sc.TxSmart.StateID > 0 && !sc.VDE {
-		apl := sc.TxUsedCost.Mul(fuelRate)
-		fmt.Printf("Pay fuel=%v fromID=%d toID=%d cost=%v apl=%v", fuelRate, fromID, toID, sc.TxUsedCost, apl)
-		wltAmount, err := decimal.NewFromString(payWallet.Amount)
+
+	resVal := (*sc.TxContract.Extend)[`result`]
+	switch v := resVal.(type) {
+	case int64:
+		result = strconv.FormatInt(v, 10)
+	case string:
+		result = v
+	default:
+		err = fmt.Errorf("bad transaction result")
+	}
+
+	// TODO: Insert payment from p.CallContract	if (flags&CallAction) != 0 && sc.TxSmart.StateID > 0 && !sc.VDE
+	return
+}
+
+func PrefixName(table string) (prefix, name string) {
+	name = table
+	if off := strings.IndexByte(table, '_'); off > 0 && table[0] >= '0' && table[0] <= '9' {
+		prefix = table[:off]
+		if strings.HasPrefix(table[off+1:], `vde_`) {
+			prefix += `_vde`
+			off += 4
+		}
+		name = table[off+1:]
+	}
+	return
+}
+
+func IsCustomTable(table string) (isCustom bool, err error) {
+	prefix, name := PrefixName(table)
+	if len(prefix) > 0 {
+		tables := &model.Table{}
+		tables.SetTablePrefix(prefix)
+		found, err := tables.Get(name)
+		if err != nil {
+			return false, err
+		}
+		if found {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// AccessTable checks the access right to the table
+func (sc *SmartContract) AccessTable(table, action string) error {
+	if table == getDefTableName(sc, `parameters`) {
+		if sc.TxSmart.UserID == converter.StrToInt64(EcosystemParam(sc, `founder_account`)) {
+			return nil
+		}
+		return fmt.Errorf(`Access denied`)
+	}
+
+	if isCustom, err := IsCustomTable(table); err != nil {
+		return err
+	} else if !isCustom {
+		return fmt.Errorf(table + ` is not a custom table`)
+	}
+	prefix, name := PrefixName(table)
+	tables := &model.Table{}
+	tables.SetTablePrefix(prefix)
+	tablePermission, err := tables.GetPermissions(name, "")
+	if err != nil {
+		return err
+	}
+	if len(tablePermission[action]) > 0 {
+		ret, err := sc.EvalIf(tablePermission[action])
 		if err != nil {
 			return err
 		}
-		if wltAmount.Cmp(apl) < 0 {
-			apl = wltAmount
+		if !ret {
+			return fmt.Errorf(`Access denied`)
 		}
-		commission := apl.Mul(decimal.New(syspar.SysInt64(`commission_size`), 0)).Div(decimal.New(100, 0)).Floor()
-		walletTable := fmt.Sprintf(`%d_keys`, sc.TxSmart.TokenEcosystem)
-				if _, _, err := sc.selectiveLoggingAndUpd([]string{`-amount`}, []interface{}{apl}, walletTable, []string{`id`},
-					[]string{converter.Int64ToStr(fromID)}, true); err != nil {
-					return err
+	}
+	return nil
+}
+
+// AccessColumns checks access rights to the columns
+func (sc *SmartContract) AccessColumns(table string, columns []string) error {
+	if table == getDefTableName(sc, `parameters`) {
+		if sc.TxSmart.UserID == converter.StrToInt64(EcosystemParam(sc, `founder_account`)) {
+			return nil
+		}
+		return fmt.Errorf(`Access denied`)
+	}
+	// We don't check IsCustomTable because we calls it in AccessTable
+	prefix, name := PrefixName(table)
+
+	tables := &model.Table{}
+	tables.SetTablePrefix(prefix)
+	columnsAndPermissions, err := tables.GetColumns(name, "")
+	if err != nil {
+		return err
+	}
+	for _, col := range columns {
+		var (
+			cond string
+			ok   bool
+		)
+		cond, ok = columnsAndPermissions[converter.Sanitize(col, ``)]
+		if !ok {
+			cond, ok = columnsAndPermissions[`*`]
+		}
+		if ok && len(cond) > 0 {
+			ret, err := sc.EvalIf(cond)
+			if err != nil {
+				return err
+			}
+			if !ret {
+				return fmt.Errorf(`Access denied`)
+			}
+		}
+	}
+	return nil
+}
+
+// EvalIf counts and returns the logical value of the specified expression
+func (sc *SmartContract) EvalIf(conditions string) (bool, error) {
+	time := sc.TxSmart.Time
+	blockTime := int64(0)
+	if sc.BlockData != nil {
+		blockTime = sc.BlockData.Time
+	}
+	return VMEvalIf(sc.VM, conditions, uint32(sc.TxSmart.StateID), &map[string]interface{}{`state`: sc.TxSmart.StateID,
+		`citizen`: sc.TxSmart.UserID, `wallet`: sc.TxSmart.UserID, `parser`: sc, `sc`: sc,
+		`block_time`: blockTime, `time`: time})
+}
+
+func getBytea(table string) map[string]bool {
+	isBytea := make(map[string]bool)
+	colTypes, err := model.GetAll(`select column_name, data_type from information_schema.columns where table_name=?`, -1, table)
+	if err != nil {
+		return isBytea
+	}
+	for _, icol := range colTypes {
+		isBytea[icol[`column_name`]] = icol[`column_name`] != `conditions` && icol[`data_type`] == `bytea`
+	}
+	return isBytea
+}
+
+func (sc *SmartContract) selectiveLoggingAndUpd(fields []string, ivalues []interface{},
+	table string, whereFields, whereValues []string, generalRollback bool) (int64, string, error) {
+	var (
+		tableID string
+		err     error
+		cost    int64
+	)
+
+	if generalRollback && sc.BlockData == nil {
+		return 0, ``, fmt.Errorf(`It is impossible to write to DB when Block is undefined`)
+	}
+
+	// TODO: Insert ??? getBytea from parser
+	isBytea := getBytea(table)
+	for i, v := range ivalues {
+		if len(fields) > i && isBytea[fields[i]] {
+			var vlen int
+			switch v.(type) {
+			case []byte:
+				vlen = len(v.([]byte))
+			case string:
+				if vbyte, err := hex.DecodeString(v.(string)); err == nil {
+					ivalues[i] = vbyte
+					vlen = len(vbyte)
+				} else {
+					vlen = len(v.(string))
 				}
-				if _, _, err := sc.selectiveLoggingAndUpd([]string{`+amount`}, []interface{}{apl.Sub(commission)}, walletTable, []string{`id`},
-					[]string{converter.Int64ToStr(toID)}, true); err != nil {
-					return err
+			}
+			if vlen > 64 {
+				// TODO: Insert ?? from parser vlen > 64
+			}
+		}
+	}
+
+	values := converter.InterfaceSliceToStr(ivalues)
+
+	addSQLFields := `id`
+	if len(addSQLFields) > 0 {
+		addSQLFields += `,`
+	}
+	for i, field := range fields {
+		field = strings.TrimSpace(field)
+		fields[i] = field
+		if field[:1] == "+" || field[:1] == "-" {
+			addSQLFields += field[1:len(field)] + ","
+		} else if strings.HasPrefix(field, `timestamp `) {
+			addSQLFields += field[len(`timestamp `):] + `,`
+		} else {
+			addSQLFields += field + ","
+		}
+	}
+	addSQLWhere := ""
+	if whereFields != nil && whereValues != nil {
+		for i := 0; i < len(whereFields); i++ {
+			if val := converter.StrToInt64(whereValues[i]); val != 0 {
+				addSQLWhere += whereFields[i] + "= " + whereValues[i] + " AND "
+			} else {
+				addSQLWhere += whereFields[i] + "= '" + whereValues[i] + "' AND "
+			}
+		}
+	}
+	if len(addSQLWhere) > 0 {
+		addSQLWhere = " WHERE " + addSQLWhere[0:len(addSQLWhere)-5]
+	}
+	if sc.VDE {
+		addSQLFields = strings.TrimRight(addSQLFields, ",")
+	} else {
+		addSQLFields += `rb_id`
+	}
+	selectQuery := `SELECT ` + addSQLFields + ` FROM "` + table + `" ` + addSQLWhere
+	//	fmt.Println(`Select`, selectQuery)
+	selectCost, err := model.GetQueryTotalCost(selectQuery)
+	if err != nil {
+		return 0, tableID, err
+	}
+	logData, err := model.GetOneRowTransaction(sc.DbTransaction, selectQuery).String()
+	if err != nil {
+		return 0, tableID, err
+	}
+	cost += selectCost
+	if whereFields != nil && len(logData) > 0 {
+		/*	if whereFields != nil {
+			if len(logData) == 0 {
+				return tableID, fmt.Errorf(`update of the unknown record`)
+			}*/
+		jsonMap := make(map[string]string)
+		for k, v := range logData {
+			if k == `id` {
+				continue
+			}
+			if (isBytea[k] || converter.InSliceString(k, []string{"hash", "tx_hash", "pub", "tx_hash", "public_key_0", "node_public_key"})) && v != "" {
+				jsonMap[k] = string(converter.BinToHex([]byte(v)))
+			} else {
+				jsonMap[k] = v
+			}
+			if k == "rb_id" {
+				k = "prev_rb_id"
+			}
+			if k[:1] == "+" || k[:1] == "-" {
+				addSQLFields += k[1:len(k)] + ","
+			} else if strings.HasPrefix(k, `timestamp `) {
+				addSQLFields += k[len(`timestamp `):] + `,`
+			} else {
+				addSQLFields += k + ","
+			}
+		}
+		jsonData, _ := json.Marshal(jsonMap)
+		if err != nil {
+			return 0, tableID, err
+		}
+		var rollback *model.Rollback
+		if !sc.VDE {
+			rollback = &model.Rollback{Data: string(jsonData), BlockID: sc.BlockData.BlockID}
+			err = rollback.Create(sc.DbTransaction)
+			if err != nil {
+				return 0, tableID, err
+			}
+		}
+		addSQLUpdate := ""
+		for i := 0; i < len(fields); i++ {
+			// utils.InSliceString(fields[i], []string{"hash", "tx_hash", "public_key", "public_key_0", "public_key_1", "public_key_2", "node_public_key"}
+			if isBytea[fields[i]] && len(values[i]) != 0 {
+				addSQLUpdate += fields[i] + `=decode('` + hex.EncodeToString([]byte(values[i])) + `','HEX'),`
+			} else if fields[i][:1] == "+" {
+				addSQLUpdate += fields[i][1:len(fields[i])] + `=` + fields[i][1:len(fields[i])] + `+` + values[i] + `,`
+			} else if fields[i][:1] == "-" {
+				addSQLUpdate += fields[i][1:len(fields[i])] + `=` + fields[i][1:len(fields[i])] + `-` + values[i] + `,`
+			} else if values[i] == `NULL` {
+				addSQLUpdate += fields[i] + `= NULL,`
+			} else if strings.HasPrefix(fields[i], `timestamp `) {
+				addSQLUpdate += fields[i][len(`timestamp `):] + `= to_timestamp('` + values[i] + `'),`
+			} else if strings.HasPrefix(values[i], `timestamp `) {
+				addSQLUpdate += fields[i] + `= timestamp '` + values[i][len(`timestamp `):] + `',`
+			} else {
+				addSQLUpdate += fields[i] + `='` + strings.Replace(values[i], `'`, `''`, -1) + `',`
+			}
+		}
+		if !sc.VDE {
+			var updateQuery string
+			updateQuery = `UPDATE "` + table + `" SET ` + addSQLUpdate + ` rb_id = ? ` + addSQLWhere
+			//		fmt.Println(`Update`, updateQuery)
+			updateCost, err := model.GetQueryTotalCost(updateQuery, rollback.RbID)
+			if err != nil {
+				return 0, tableID, err
+			}
+			cost += updateCost
+			addSQLUpdate += fmt.Sprintf("rb_id = %d", rollback.RbID)
+		} else {
+			addSQLUpdate = strings.TrimRight(addSQLUpdate, `,`)
+		}
+
+		fmt.Println(`UPDATE`, table, addSQLUpdate, addSQLWhere)
+		err = model.Update(sc.DbTransaction, table, addSQLUpdate, addSQLWhere)
+		if err != nil {
+			return 0, tableID, err
+		}
+		tableID = logData[`id`]
+	} else {
+		isID := false
+		addSQLIns0 := ""
+		addSQLIns1 := ""
+		for i := 0; i < len(fields); i++ {
+			if fields[i] == `id` {
+				isID = true
+			}
+			if fields[i][:1] == "+" || fields[i][:1] == "-" {
+				addSQLIns0 += fields[i][1:len(fields[i])] + `,`
+			} else if strings.HasPrefix(fields[i], `timestamp `) {
+				addSQLIns0 += fields[i][len(`timestamp `):] + `,`
+			} else {
+				addSQLIns0 += fields[i] + `,`
+			}
+			// || utils.InSliceString(fields[i], []string{"hash", "tx_hash", "public_key", "public_key_0", "node_public_key"}))
+			if isBytea[fields[i]] && len(values[i]) != 0 {
+				addSQLIns1 += `decode('` + hex.EncodeToString([]byte(values[i])) + `','HEX'),`
+			} else if values[i] == `NULL` {
+				addSQLIns1 += `NULL,`
+			} else if strings.HasPrefix(fields[i], `timestamp `) {
+				addSQLIns1 += `to_timestamp('` + values[i] + `'),`
+			} else if strings.HasPrefix(values[i], `timestamp `) {
+				addSQLIns1 += `timestamp '` + values[i][len(`timestamp `):] + `',`
+			} else {
+				addSQLIns1 += `'` + strings.Replace(values[i], `'`, `''`, -1) + `',`
+			}
+		}
+		if whereFields != nil && whereValues != nil {
+			for i := 0; i < len(whereFields); i++ {
+				if whereFields[i] == `id` {
+					isID = true
 				}
-				if _, _, err := sc.selectiveLoggingAndUpd([]string{`+amount`}, []interface{}{commission}, walletTable, []string{`id`},
-					[]string{syspar.GetCommissionWallet(sc.TxSmart.TokenEcosystem)}, true); err != nil {
-					return err
-				}
-		fmt.Printf(" Paid commission %v\r\n", commission)
-	} */
-	return
+				addSQLIns0 += `` + whereFields[i] + `,`
+				addSQLIns1 += `'` + whereValues[i] + `',`
+			}
+		}
+		addSQLIns0 = addSQLIns0[0 : len(addSQLIns0)-1]
+		addSQLIns1 = addSQLIns1[0 : len(addSQLIns1)-1]
+		//		fmt.Println(`Sel Log`, "INSERT INTO "+table+" ("+addSQLIns0+") VALUES ("+addSQLIns1+")")
+		if !isID {
+			id, err := model.GetNextID(table)
+			if err != nil {
+				return 0, ``, err
+			}
+			tableID = converter.Int64ToStr(id)
+			addSQLIns0 += `,id`
+			addSQLIns1 += `,'` + tableID + `'`
+		}
+
+		insertQuery := `INSERT INTO "` + table + `" (` + addSQLIns0 + `) VALUES (` + addSQLIns1 + `)`
+
+		insertCost, err := model.GetQueryTotalCost(insertQuery)
+		if err != nil {
+			return 0, tableID, err
+		}
+		cost += insertCost
+		err = model.GetDB(sc.DbTransaction).Exec(insertQuery).Error
+	}
+	if err != nil {
+		return 0, tableID, err
+	}
+
+	if generalRollback {
+		rollbackTx := &model.RollbackTx{
+			BlockID:   sc.BlockData.BlockID,
+			TxHash:    sc.TxHash,
+			NameTable: table,
+			TableID:   tableID,
+		}
+
+		err = rollbackTx.Create(sc.DbTransaction)
+		if err != nil {
+			return 0, tableID, err
+		}
+	}
+	return cost, tableID, nil
 }
