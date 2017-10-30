@@ -62,5 +62,25 @@ func TestVDECreate(t *testing.T) {
 		t.Error(err)
 		return
 	}
+	form = url.Values{`Name`: {rnd}, `Value`: {`Test value`}, `Conditions`: {`ContractConditions("MainCondition")`},
+		`vde`: {`1`}}
+
+	if retid, _, err = postTxResult(`NewParameter`, &form); err != nil {
+		t.Error(err)
+		return
+	}
+	form = url.Values{`Name`: {`new_table`}, `Value`: {`Test value`}, `Conditions`: {`ContractConditions("MainCondition")`},
+		`vde`: {`1`}}
+	if err = postTx(`NewParameter`, &form); err != nil && err.Error() !=
+		`500 {"error": "E_SERVER", "msg": "!Parameter new_table already exists" }` {
+		t.Error(err)
+		return
+	}
+	form = url.Values{`Id`: {converter.Int64ToStr(retid)}, `Value`: {`Test edit value`}, `Conditions`: {`true`},
+		`vde`: {`1`}}
+	if retid, _, err = postTxResult(`EditParameter`, &form); err != nil {
+		t.Error(err)
+		return
+	}
 	fmt.Println(`OK`)
 }

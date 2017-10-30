@@ -550,7 +550,6 @@ func (sc *SmartContract) CallContract(flags int) (result string, err error) {
 	default:
 		err = fmt.Errorf("bad transaction result")
 	}
-
 	// TODO: Insert payment from p.CallContract	if (flags&CallAction) != 0 && sc.TxSmart.StateID > 0 && !sc.VDE
 	return
 }
@@ -831,7 +830,7 @@ func (sc *SmartContract) selectiveLoggingAndUpd(fields []string, ivalues []inter
 			addSQLUpdate = strings.TrimRight(addSQLUpdate, `,`)
 		}
 
-		fmt.Println(`UPDATE`, table, addSQLUpdate, addSQLWhere)
+		//		fmt.Println(`UPDATE`, table, addSQLUpdate, addSQLWhere)
 		err = model.Update(sc.DbTransaction, table, addSQLUpdate, addSQLWhere)
 		if err != nil {
 			return 0, tableID, err

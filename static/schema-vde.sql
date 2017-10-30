@@ -230,4 +230,36 @@ func ConditionById(table string, validate bool) {
         DBUpdate(`contracts`, $Id, `value,conditions`, $Value, $Conditions)
         FlushContract(root, $Id, false)
     }
+}', 'ContractConditions(`MainCondition`)'),
+('5','contract NewParameter {
+    data {
+        Name string
+        Value string
+        Conditions string
+    }
+    conditions {
+        var ret array
+        ValidateCondition($Conditions, $state)
+        ret = DBFind(`parameters`).Columns(`id`).Where(`name=?`, $Name).Limit(1)
+        if Len(ret) > 0 {
+            warning Sprintf( `Parameter %%s already exists`, $Name)
+        }
+    }
+    action {
+        $result = DBInsert(`parameters`, `name,value,conditions`, $Name, $Value, $Conditions )
+    }
+}', 'ContractConditions(`MainCondition`)'),
+('6','contract EditParameter {
+    data {
+        Id int
+        Value string
+        Conditions string
+    }
+    conditions {
+        ConditionById(`parameters`, true)
+    }
+    action {
+        DBUpdate(`parameters`, $Id, `value,conditions`, $Value, $Conditions )
+    }
 }', 'ContractConditions(`MainCondition`)');
+
