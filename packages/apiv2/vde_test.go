@@ -82,5 +82,64 @@ func TestVDECreate(t *testing.T) {
 		t.Error(err)
 		return
 	}
+
+	form = url.Values{"Name": {`menu` + rnd}, "Value": {`first
+		second
+		third`}, "Title": {`My Menu`},
+		"Conditions": {`true`}, `vde`: {`1`}}
+	retid, _, err = postTxResult(`NewMenu`, &form)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	form = url.Values{`Id`: {converter.Int64ToStr(retid)}, `Value`: {`Test edit value`},
+		`Conditions`: {`true`},
+		`vde`:        {`1`}}
+	if err = postTx(`EditMenu`, &form); err != nil {
+		t.Error(err)
+		return
+	}
+	form = url.Values{"Id": {converter.Int64ToStr(retid)}, "Value": {`Span(Append)`},
+		`vde`: {`1`}}
+	err = postTx(`AppendMenu`, &form)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	form = url.Values{"Name": {`page` + rnd}, "Value": {`Page`}, "Menu": {`government`},
+		"Conditions": {`true`}, `vde`: {`1`}}
+	retid, _, err = postTxResult(`NewPage`, &form)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	form = url.Values{`Id`: {converter.Int64ToStr(retid)}, `Value`: {`Test edit page value`},
+		`Conditions`: {`true`}, "Menu": {`government`},
+		`vde`: {`1`}}
+	if err = postTx(`EditPage`, &form); err != nil {
+		t.Error(err)
+		return
+	}
+	form = url.Values{"Id": {converter.Int64ToStr(retid)}, "Value": {`Span(Test Page)`},
+		`vde`: {`1`}}
+	err = postTx(`AppendPage`, &form)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	form = url.Values{"Name": {`block` + rnd}, "Value": {`Page block`}, "Conditions": {`true`}, `vde`: {`1`}}
+	retid, _, err = postTxResult(`NewBlock`, &form)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	form = url.Values{`Id`: {converter.Int64ToStr(retid)}, `Value`: {`Test edit block value`},
+		`Conditions`: {`true`}, `vde`: {`1`}}
+	if err = postTx(`EditBlock`, &form); err != nil {
+		t.Error(err)
+		return
+	}
+
 	fmt.Println(`OK`)
 }

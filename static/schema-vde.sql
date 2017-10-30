@@ -69,7 +69,10 @@ INSERT INTO "%[1]d_vde_parameters" ("id","name", "value", "conditions") VALUES
 ('6','changing_signature', 'ContractConditions(`MainCondition`)', 'ContractConditions(`MainCondition`)'),
 ('7','changing_page', 'ContractConditions(`MainCondition`)', 'ContractConditions(`MainCondition`)'),
 ('8','changing_menu', 'ContractConditions(`MainCondition`)', 'ContractConditions(`MainCondition`)'),
-('9','changing_contracts', 'ContractConditions(`MainCondition`)', 'ContractConditions(`MainCondition`)');
+('9','changing_contracts', 'ContractConditions(`MainCondition`)', 'ContractConditions(`MainCondition`)'),
+('10','stylesheet', 'body { 
+  /* You can define your custom styles here or create custom CSS rules */
+}', 'ContractConditions(`MainCondition`)');
 
 CREATE TABLE "%[1]d_vde_tables" (
 "name" varchar(100) UNIQUE NOT NULL DEFAULT '',
@@ -91,17 +94,17 @@ INSERT INTO "%[1]d_vde_tables" ("name", "permissions","columns", "conditions") V
           "res": "ContractAccess(\"EditLang\")",
           "conditions": "ContractAccess(\"EditLang\")"}', 'ContractAccess("EditTable")'),
         ('menu', 
-        '{"insert": "ContractAccess(\"NewMenu\")", "update": "ContractAccess(\"EditMenu\")", 
+        '{"insert": "ContractAccess(\"NewMenu\")", "update": "ContractAccess(\"EditMenu\", \"AppendMenu\")", 
           "new_column": "ContractAccess(\"NewColumn\")"}',
         '{"name": "ContractAccess(\"EditMenu\")",
-    "value": "ContractAccess(\"EditMenu\")",
+    "value": "ContractAccess(\"EditMenu\", \"AppendMenu\")",
     "conditions": "ContractAccess(\"EditMenu\")"
         }', 'ContractAccess("EditTable")'),
         ('pages', 
-        '{"insert": "ContractAccess(\"NewPage\")", "update": "ContractAccess(\"EditPage\")", 
+        '{"insert": "ContractAccess(\"NewPage\")", "update": "ContractAccess(\"EditPage\", \"AppendPage\")", 
           "new_column": "ContractAccess(\"NewColumn\")"}',
         '{"name": "ContractAccess(\"EditPage\")",
-    "value": "ContractAccess(\"EditPage\")",
+    "value": "ContractAccess(\"EditPage\", \"AppendPage\")",
     "menu": "ContractAccess(\"EditPage\")",
     "conditions": "ContractAccess(\"EditPage\")"
         }', 'ContractAccess("EditTable")'),
@@ -261,5 +264,125 @@ func ConditionById(table string, validate bool) {
     action {
         DBUpdate(`parameters`, $Id, `value,conditions`, $Value, $Conditions )
     }
+}', 'ContractConditions(`MainCondition`)'),
+('7', 'contract NewMenu {
+    data {
+    	Name       string
+    	Value      string
+    	Title      string "optional"
+    	Conditions string
+    }
+    conditions {
+        var ret int
+        ValidateCondition($Conditions,$state)
+        ret = DBFind(`menu`).Columns(`id`).Where(`name=?`, $Name).Limit(1)
+        if Len(ret) > 0 {
+            warning Sprintf( `Menu %%s already exists`, $Name)
+        }
+    }
+    action {
+        $result = DBInsert(`menu`, `name,value,title,conditions`, $Name, $Value, $Title, $Conditions )
+    }
+}', 'ContractConditions(`MainCondition`)'),
+('8','contract EditMenu {
+    data {
+    	Id         int
+    	Value      string
+        Title      string "optional"
+    	Conditions string
+    }
+    conditions {
+        ConditionById(`menu`, true)
+    }
+    action {
+        DBUpdate(`menu`, $Id, `value,title,conditions`, $Value, $Title, $Conditions)
+    }
+}', 'ContractConditions(`MainCondition`)'),
+('9','contract AppendMenu {
+    data {
+        Id     int
+    	Value      string
+    }
+    conditions {
+        ConditionById(`menu`, false)
+    }
+    action {
+        DBUpdate(`menu`, $Id, `value`, DBString(`menu`, `value`, $Id) + "\r\n" + $Value )
+    }
+}', 'ContractConditions(`MainCondition`)'),
+('10','contract NewPage {
+    data {
+    	Name       string
+    	Value      string
+    	Menu       string
+    	Conditions string
+    }
+    conditions {
+        var ret int
+        ValidateCondition($Conditions,$state)
+        ret = DBFind(`pages`).Columns(`id`).Where(`name=?`, $Name).Limit(1)
+        if Len(ret) > 0 {
+            warning Sprintf( `Page %%s already exists`, $Name)
+        }
+    }
+    action {
+        $result = DBInsert(`pages`, `name,value,menu,conditions`, $Name, $Value, $Menu, $Conditions )
+    }
+}', 'ContractConditions(`MainCondition`)'),
+('11','contract EditPage {
+    data {
+        Id         int
+    	Value      string
+    	Menu      string
+    	Conditions string
+    }
+    conditions {
+        ConditionById(`pages`, true)
+    }
+    action {
+        DBUpdate(`pages`, $Id, `value,menu,conditions`, $Value, $Menu, $Conditions)
+    }
+}', 'ContractConditions(`MainCondition`)'),
+('12','contract AppendPage {
+    data {
+        Id         int
+    	Value      string
+    }
+    conditions {
+        ConditionById(`pages`, false)
+    }
+    action {
+        DBUpdate(`pages`, $Id, `value`,  DBString(`pages`, `value`, $Id) + "\r\n" + $Value )
+    }
+}', 'ContractConditions(`MainCondition`)'),
+('13','contract NewBlock {
+    data {
+    	Name       string
+    	Value      string
+    	Conditions string
+    }
+    conditions {
+        var ret int
+        ValidateCondition($Conditions,$state)
+        ret = DBFind(`blocks`).Columns(`id`).Where(`name=?`, $Name).Limit(1)
+        if Len(ret) > 0 {
+            warning Sprintf( `Block %%s already exists`, $Name)
+        }
+    }
+    action {
+        $result = DBInsert(`blocks`, `name,value,conditions`, $Name, $Value, $Conditions )
+    }
+}', 'ContractConditions(`MainCondition`)'),
+('14','contract EditBlock {
+    data {
+        Id         int
+    	Value      string
+    	Conditions string
+    }
+    conditions {
+        ConditionById(`blocks`, true)
+    }
+    action {
+        DBUpdate(`blocks`, $Id, `value,conditions`, $Value, $Conditions)
+    }
 }', 'ContractConditions(`MainCondition`)');
-
