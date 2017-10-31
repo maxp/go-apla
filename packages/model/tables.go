@@ -10,7 +10,8 @@ import (
 
 type Table struct {
 	tableName   string
-	Name        string `gorm:"primary_key;not null;size:100"`
+	ID        int64  `gorm:"primary_key;not null"`
+	Name        string `gorm:"not null;size:100"`
 	Permissions string `gorm:"not null;type:jsonb(PostgreSQL)"`
 	Columns     string `gorm:"not null;type:jsonb(PostgreSQL)"`
 	Conditions  string `gorm:"not null"`
@@ -19,7 +20,8 @@ type Table struct {
 
 type TableVDE struct {
 	tableName   string
-	Name        string `gorm:"primary_key;not null;size:100"`
+	ID        int64  `gorm:"primary_key;not null"`
+	Name        string `gorm:"not null;size:100"`
 	Permissions string `gorm:"not null;type:jsonb(PostgreSQL)"`
 	Columns     string `gorm:"not null;type:jsonb(PostgreSQL)"`
 	Conditions  string `gorm:"not null"`

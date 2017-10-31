@@ -281,7 +281,13 @@ func CreateTable(sc *SmartContract, name string, columns, permissions string) er
 	if !sc.VDE {
 		state = `@1`
 	}
+	id, err := model.GetNextID(getDefTableName(sc, `tables`))
+	if err != nil {
+		return err
+	}
+
 	t := &model.TableVDE{
+		ID:          id,
 		Name:        name,
 		Columns:     string(colout),
 		Permissions: string(permout),

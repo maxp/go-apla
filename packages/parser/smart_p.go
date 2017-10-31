@@ -1762,7 +1762,12 @@ func CreateTable(p *Parser, name string, columns, permissions string) error {
 	if err != nil {
 		return err
 	}
+	id, err := model.GetNextID(prefix + `_tables`)
+	if err != nil {
+		return err
+	}
 	t := &model.Table{
+		ID:          id,
 		Name:        name,
 		Columns:     string(colout),
 		Permissions: string(permout),

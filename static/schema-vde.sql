@@ -75,32 +75,34 @@ INSERT INTO "%[1]d_vde_parameters" ("id","name", "value", "conditions") VALUES
 }', 'ContractConditions(`MainCondition`)');
 
 CREATE TABLE "%[1]d_vde_tables" (
+"id" bigint NOT NULL  DEFAULT '0',
 "name" varchar(100) UNIQUE NOT NULL DEFAULT '',
 "permissions" jsonb,
 "columns" jsonb,
 "conditions" text  NOT NULL DEFAULT ''
 );
-ALTER TABLE ONLY "%[1]d_vde_tables" ADD CONSTRAINT "%[1]d_vde_tables_pkey" PRIMARY KEY (name);
+ALTER TABLE ONLY "%[1]d_vde_tables" ADD CONSTRAINT "%[1]d_vde_tables_pkey" PRIMARY KEY ("id");
+CREATE INDEX "%[1]d_vde_tables_index_name" ON "%[1]d_vde_tables" (name);
 
-INSERT INTO "%[1]d_vde_tables" ("name", "permissions","columns", "conditions") VALUES ('contracts', 
+INSERT INTO "%[1]d_vde_tables" ("id", "name", "permissions","columns", "conditions") VALUES ('1', 'contracts', 
         '{"insert": "ContractAccess(\"NewContract\")", "update": "ContractAccess(\"EditContract\")", 
           "new_column": "ContractAccess(\"NewColumn\")"}',
         '{"value": "ContractAccess(\"EditContract\")",
           "conditions": "ContractAccess(\"EditContract\")"}', 'ContractAccess("EditTable")'),
-        ('languages', 
+        ('2', 'languages', 
         '{"insert": "ContractAccess(\"NewLang\")", "update": "ContractAccess(\"EditLang\")", 
           "new_column": "ContractAccess(\"NewColumn\")"}',
         '{ "name": "ContractAccess(\"EditLang\")",
           "res": "ContractAccess(\"EditLang\")",
           "conditions": "ContractAccess(\"EditLang\")"}', 'ContractAccess("EditTable")'),
-        ('menu', 
+        ('3', 'menu', 
         '{"insert": "ContractAccess(\"NewMenu\")", "update": "ContractAccess(\"EditMenu\", \"AppendMenu\")", 
           "new_column": "ContractAccess(\"NewColumn\")"}',
         '{"name": "ContractAccess(\"EditMenu\")",
     "value": "ContractAccess(\"EditMenu\", \"AppendMenu\")",
     "conditions": "ContractAccess(\"EditMenu\")"
         }', 'ContractAccess("EditTable")'),
-        ('pages', 
+        ('4', 'pages', 
         '{"insert": "ContractAccess(\"NewPage\")", "update": "ContractAccess(\"EditPage\", \"AppendPage\")", 
           "new_column": "ContractAccess(\"NewColumn\")"}',
         '{"name": "ContractAccess(\"EditPage\")",
@@ -108,14 +110,14 @@ INSERT INTO "%[1]d_vde_tables" ("name", "permissions","columns", "conditions") V
     "menu": "ContractAccess(\"EditPage\")",
     "conditions": "ContractAccess(\"EditPage\")"
         }', 'ContractAccess("EditTable")'),
-        ('blocks', 
+        ('5', 'blocks', 
         '{"insert": "ContractAccess(\"NewBlock\")", "update": "ContractAccess(\"EditBlock\")", 
           "new_column": "ContractAccess(\"NewColumn\")"}',
         '{"name": "ContractAccess(\"EditBlock\")",
     "value": "ContractAccess(\"EditBlock\")",
     "conditions": "ContractAccess(\"EditBlock\")"
         }', 'ContractAccess("EditTable")'),
-        ('signatures', 
+        ('6', 'signatures', 
         '{"insert": "ContractAccess(\"NewSign\")", "update": "ContractAccess(\"EditSign\")", 
           "new_column": "ContractAccess(\"NewColumn\")"}',
         '{"name": "ContractAccess(\"EditSign\")",
