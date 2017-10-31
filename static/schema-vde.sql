@@ -385,4 +385,30 @@ func ConditionById(table string, validate bool) {
     action {
         DBUpdate(`blocks`, $Id, `value,conditions`, $Value, $Conditions)
     }
+}', 'ContractConditions(`MainCondition`)'),
+('15','contract NewTable {
+    data {
+    	Name       string
+    	Columns      string
+    	Permissions string
+    }
+    conditions {
+        TableConditions($Name, $Columns, $Permissions)
+    }
+    action {
+        CreateTable($Name, $Columns, $Permissions)
+    }
+}', 'ContractConditions(`MainCondition`)'),
+('16','contract EditTable {
+    data {
+    	Name       string
+    	Permissions string
+    }
+    conditions {
+        TableConditions($Name, ``, $Permissions)
+    }
+    action {
+        PermTable($Name, $Permissions )
+    }
 }', 'ContractConditions(`MainCondition`)');
+

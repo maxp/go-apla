@@ -17,11 +17,27 @@ type Table struct {
 	RbID        int64  `gorm:"not null"`
 }
 
+type TableVDE struct {
+	tableName   string
+	Name        string `gorm:"primary_key;not null;size:100"`
+	Permissions string `gorm:"not null;type:jsonb(PostgreSQL)"`
+	Columns     string `gorm:"not null;type:jsonb(PostgreSQL)"`
+	Conditions  string `gorm:"not null"`
+}
+
 func (t *Table) SetTablePrefix(prefix string) {
 	t.tableName = prefix + "_tables"
 }
 
+func (t *TableVDE) SetTablePrefix(prefix string) {
+	t.tableName = prefix + "_tables"
+}
+
 func (t *Table) TableName() string {
+	return t.tableName
+}
+
+func (t *TableVDE) TableName() string {
 	return t.tableName
 }
 
@@ -34,6 +50,10 @@ func (t *Table) Get(name string) (bool, error) {
 }
 
 func (t *Table) Create(transaction *DbTransaction) error {
+	return GetDB(transaction).Create(t).Error
+}
+
+func (t *TableVDE) Create(transaction *DbTransaction) error {
 	return GetDB(transaction).Create(t).Error
 }
 
@@ -176,6 +196,14 @@ func CreateTable(transaction *DbTransaction, tableName, colsSQL string) error {
 				"id" bigint NOT NULL DEFAULT '0',
 				` + colsSQL + `
 				"rb_id" bigint NOT NULL DEFAULT '0'
+				);
+				ALTER TABLE ONLY "` + tableName + `" ADD CONSTRAINT "` + tableName + `_pkey" PRIMARY KEY (id);`).Error
+}
+
+func CreateVDETable(transaction *DbTransaction, tableName, colsSQL string) error {
+	return GetDB(transaction).Exec(`CREATE TABLE "` + tableName + `" (
+				"id" bigint NOT NULL DEFAULT '0',
+				` + colsSQL + `
 				);
 				ALTER TABLE ONLY "` + tableName + `" ADD CONSTRAINT "` + tableName + `_pkey" PRIMARY KEY (id);`).Error
 }

@@ -655,6 +655,37 @@ func (sc *SmartContract) AccessColumns(table string, columns []string) error {
 	return nil
 }
 
+// AccessRights checks the access right by executing the condition value
+func (sc *SmartContract) AccessRights(condition string, iscondition bool) error {
+	sp := &model.StateParameter{}
+	prefix := converter.Int64ToStr(sc.TxSmart.StateID)
+	if sc.VDE {
+		prefix += `_vde`
+	}
+
+	sp.SetTablePrefix(prefix)
+	err := sp.GetByNameTransaction(sc.DbTransaction, condition)
+	if err != nil {
+		return err
+	}
+	conditions := sp.Value
+	if iscondition {
+		conditions = sp.Conditions
+	}
+	if len(conditions) > 0 {
+		ret, err := sc.EvalIf(conditions)
+		if err != nil {
+			return err
+		}
+		if !ret {
+			return fmt.Errorf(`Access denied`)
+		}
+	} else {
+		return fmt.Errorf(`There is not %s in parameters`, condition)
+	}
+	return nil
+}
+
 // EvalIf counts and returns the logical value of the specified expression
 func (sc *SmartContract) EvalIf(conditions string) (bool, error) {
 	time := sc.TxSmart.Time
