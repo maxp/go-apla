@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/AplaProject/go-apla/packages/converter"
 	"github.com/AplaProject/go-apla/packages/model"
 )
 
@@ -42,7 +41,8 @@ type tableResult struct {
 func table(w http.ResponseWriter, r *http.Request, data *apiData) (err error) {
 	var result tableResult
 
-	row, err := model.GetOneRow(`select * from "`+converter.Int64ToStr(data.state)+`_tables" where name=?`,
+	prefix := getPrefix(data)
+	row, err := model.GetOneRow(`select * from "`+prefix+`_tables" where name=?`,
 		data.params[`name`].(string)).String()
 	if len(row[`name`]) > 0 {
 		var perm map[string]string
@@ -57,7 +57,7 @@ func table(w http.ResponseWriter, r *http.Request, data *apiData) (err error) {
 		}
 		columns := make([]columnInfo, 0)
 		for key, value := range cols {
-			colType, err := model.GetColumnType(converter.Int64ToStr(data.state)+`_`+data.params[`name`].(string), key)
+			colType, err := model.GetColumnType(prefix+`_`+data.params[`name`].(string), key)
 			if err != nil {
 				return errorAPI(w, err.Error(), http.StatusInternalServerError)
 			}
