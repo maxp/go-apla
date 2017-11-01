@@ -39,6 +39,8 @@ func TestJSON(t *testing.T) {
 }
 
 var forTest = tplList{
+	{`ImageInput(myimg,100,40)`,
+		`[{"tag":"imageinput","attr":{"name":"myimg","ratio":"40","width":"100"}}]`},
 	{`LinkPage(My page,mypage)`,
 		`[{"tag":"linkpage","attr":{"page":"mypage"},"children":[{"tag":"text","text":"My page"}]}]`},
 	{`Image(/images/myimage.jpg,My photo,myclass)`,
@@ -48,8 +50,8 @@ var forTest = tplList{
 		2,"Mark, Smith"
 	)`,
 		`[{"tag":"data","attr":{"columns":["id","name"],"data":[],"error":"line 2, column 0: wrong number of fields in line","source":"mysrc"}}]`},
-	{`Select(mysrc,name,myclass)`,
-		`[{"tag":"select","attr":{"class":"myclass","column":"name","source":"mysrc"}}]`},
+	{`Select(myselect,mysrc,name,myclass)`,
+		`[{"tag":"select","attr":{"class":"myclass","column":"name","name":"myselect","source":"mysrc"}}]`},
 	{`Data(mysrc,"id,name"){
 		"1",John Silver
 		2,"Mark, Smith"
