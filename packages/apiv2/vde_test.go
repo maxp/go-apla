@@ -142,10 +142,10 @@ func TestVDECreate(t *testing.T) {
 	}
 
 	name := randName(`tbl`)
-	form = url.Values{"Name": {name}, `vde`: {`1`}, "Columns": {`[{"name":"MyName","type":"varchar", "index": "1", 
-		  "conditions":"true"},
-		{"name":"Amount", "type":"number","index": "0", "conditions":"true"},
-		{"name":"Active", "type":"character","index": "0", "conditions":"true"}]`},
+	form = url.Values{"Name": {name}, `vde`: {`1`}, "Columns": {`[{"name":"MyName","type":"varchar", "index": "1",
+			  "conditions":"true"},
+			{"name":"Amount", "type":"number","index": "0", "conditions":"true"},
+			{"name":"Active", "type":"character","index": "0", "conditions":"true"}]`},
 		"Permissions": {`{"insert": "true", "update" : "true", "new_column": "true"}`}}
 	err = postTx(`NewTable`, &form)
 	if err != nil {
@@ -154,26 +154,26 @@ func TestVDECreate(t *testing.T) {
 	}
 	form = url.Values{"Name": {name}, `vde`: {`1`},
 		"Permissions": {`{"insert": "ContractConditions(\"MainCondition\")",
-					"update" : "true", "new_column": "ContractConditions(\"MainCondition\")"}`}}
+						"update" : "true", "new_column": "ContractConditions(\"MainCondition\")"}`}}
 	err = postTx(`EditTable`, &form)
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	/*		form = url.Values{"TableName": {name}, "Name": {`newCol`},
-				"Type": {"varchar"}, "Index": {"0"}, "Permissions": {"true"}}
-			err = postTx(`NewColumn`, &form)
-			if err != nil {
-				t.Error(err)
-				return
-			}
-			form = url.Values{"TableName": {name}, "Name": {`newCol`},
-				"Permissions": {"ContractConditions(\"MainCondition\")"}}
-			err = postTx(`EditColumn`, &form)
-			if err != nil {
-				t.Error(err)
-				return
-			}
-	*/
+	form = url.Values{"TableName": {name}, "Name": {`newCol`}, `vde`: {`1`},
+		"Type": {"varchar"}, "Index": {"0"}, "Permissions": {"true"}}
+	err = postTx(`NewColumn`, &form)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	form = url.Values{"TableName": {name}, "Name": {`newCol`}, `vde`: {`1`},
+		"Permissions": {"ContractConditions(\"MainCondition\")"}}
+	err = postTx(`EditColumn`, &form)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
 	fmt.Println(`OK`)
 }

@@ -55,16 +55,19 @@ var (
 		"DBUpdate": struct{}{},
 	}
 	extendCost = map[string]int64{
+		"ColumnCondition":    50,
 		"CompileContract":    100,
 		"ContractAccess":     50,
 		"ContractConditions": 50,
 		"ContractsList":      10,
+		"CreateColumn":       50,
 		"CreateTable":        100,
 		"EcosystemParam":     10,
 		"Eval":               10,
 		"FlushContract":      50,
 		"IsContract":         10,
 		"Len":                5,
+		"PermColumn":         50,
 		"PermTable":          100,
 		"TableConditions":    100,
 		"ValidateCondition":  30,
@@ -80,10 +83,12 @@ func getCost(name string) int64 {
 
 func EmbedFuncs(vm *script.VM) {
 	vmExtend(vm, &script.ExtendData{Objects: map[string]interface{}{
+		"ColumnCondition":    ColumnCondition,
 		"CompileContract":    CompileContract,
 		"ContractAccess":     ContractAccess,
 		"ContractConditions": ContractConditions,
 		"ContractsList":      contractsList,
+		"CreateColumn":       CreateColumn,
 		"CreateTable":        CreateTable,
 		"DBInsert":           DBInsert,
 		"DBSelect":           DBSelect,
@@ -93,6 +98,7 @@ func EmbedFuncs(vm *script.VM) {
 		"FlushContract":      FlushContract,
 		"IsContract":         IsContract,
 		"Len":                Len,
+		"PermColumn":         PermColumn,
 		"PermTable":          PermTable,
 		"TableConditions":    TableConditions,
 		"ValidateCondition":  ValidateCondition,
@@ -579,4 +585,153 @@ func ValidateCondition(sc *SmartContract, condition string, state int64) error {
 		return fmt.Errorf("Conditions cannot be empty")
 	}
 	return VMCompileEval(sc.VM, condition, uint32(state))
+}
+
+func ColumnCondition(sc *SmartContract, tableName, name, coltype, permissions, index string) error {
+	if !accessContracts(sc, `NewColumn`, `EditColumn`) {
+		return fmt.Errorf(`ColumnCondition can be only called from NewColumn or EditColumn`)
+	}
+	isExist := strings.HasSuffix(sc.TxContract.Name, `EditColumn`)
+	tEx := &model.Table{}
+	prefix := converter.Int64ToStr(sc.TxSmart.StateID)
+	if sc.VDE {
+		prefix += `_vde`
+	}
+	tEx.SetTablePrefix(prefix)
+	name = strings.ToLower(name)
+
+	exists, err := tEx.IsExistsByPermissionsAndTableName(name, tableName)
+	if err != nil {
+		return err
+	}
+	if isExist {
+		if !exists {
+			return fmt.Errorf(`column %s doesn't exists`, name)
+		}
+	} else if exists {
+		return fmt.Errorf(`column %s exists`, name)
+	}
+	if len(permissions) == 0 {
+		return fmt.Errorf(`Permissions is empty`)
+	}
+	if err = VMCompileEval(sc.VM, permissions, uint32(sc.TxSmart.StateID)); err != nil {
+		return err
+	}
+	tblName := getDefTableName(sc, tableName)
+	if isExist {
+		return sc.AccessTable(tblName, `update`)
+	}
+	count, err := model.GetColumnCount(tblName)
+	if count >= int64(syspar.GetMaxColumns()) {
+		return fmt.Errorf(`Too many columns. Limit is %d`, syspar.GetMaxColumns())
+	}
+	if coltype != `varchar` && coltype != `number` && coltype != `datetime` && coltype != `character` &&
+		coltype != `text` && coltype != `bytea` && coltype != `double` && coltype != `money` {
+		return fmt.Errorf(`incorrect type`)
+	}
+	if index == `1` {
+		count, err := model.NumIndexes(tblName)
+		if err != nil {
+			return err
+		}
+		if count >= syspar.GetMaxIndexes() {
+			return fmt.Errorf(`Too many indexes. Limit is %d`, syspar.GetMaxIndexes())
+		}
+		if coltype != `varchar` && coltype != `number` && coltype != `datetime` {
+			return fmt.Errorf(`incorrect index type`)
+		}
+	}
+
+	if err := sc.AccessTable(tblName, "new_column"); err != nil {
+		return err
+	}
+	return nil
+}
+
+func CreateColumn(sc *SmartContract, tableName, name, coltype, permissions, index string) error {
+	if !accessContracts(sc, `NewColumn`) {
+		return fmt.Errorf(`CreateColumn can be only called from NewColumn`)
+	}
+	name = strings.ToLower(name)
+	tblname := getDefTableName(sc, tableName)
+
+	colType := ``
+	switch coltype {
+	case "varchar":
+		colType = `varchar(102400)`
+	case "number":
+		colType = `bigint NOT NULL DEFAULT '0'`
+	case "character":
+		colType = `character(1) NOT NULL DEFAULT '0'`
+	case "datetime":
+		colType = `timestamp`
+	case "double":
+		colType = `double precision`
+	case "money":
+		colType = `decimal (30, 0) NOT NULL DEFAULT '0'`
+	default:
+		colType = coltype
+	}
+	err := model.AlterTableAddColumn(sc.DbTransaction, tblname, name, colType)
+	if err != nil {
+		return err
+	}
+
+	if index == "1" {
+		err = model.CreateIndex(sc.DbTransaction, tblname+"_"+name+"_index", tblname, name)
+		if err != nil {
+			return err
+		}
+	}
+	tables := getDefTableName(sc, `tables`)
+	type cols struct {
+		Columns string
+	}
+	temp := &cols{}
+	err = model.DBConn.Table(tables).Where("name = ?", tableName).Select("columns").Find(temp).Error
+	if err != nil {
+		return err
+	}
+	var perm map[string]string
+	err = json.Unmarshal([]byte(temp.Columns), &perm)
+	if err != nil {
+		return err
+	}
+	perm[name] = permissions
+	permout, err := json.Marshal(perm)
+	if err != nil {
+		return err
+	}
+	_, _, err = sc.selectiveLoggingAndUpd([]string{`columns`}, []interface{}{string(permout)},
+		tables, []string{`name`}, []string{tableName}, !sc.VDE)
+	return nil
+}
+
+func PermColumn(sc *SmartContract, tableName, name, permissions string) error {
+	if !accessContracts(sc, `EditColumn`) {
+		return fmt.Errorf(`EditColumn can be only called from EditColumn`)
+	}
+	name = strings.ToLower(name)
+	tables := getDefTableName(sc, `tables`)
+	type cols struct {
+		Columns string
+	}
+	temp := &cols{}
+	err := model.DBConn.Table(tables).Where("name = ?", tableName).Select("columns").Find(temp).Error
+	if err != nil {
+		return err
+	}
+	var perm map[string]string
+	err = json.Unmarshal([]byte(temp.Columns), &perm)
+	if err != nil {
+		return err
+	}
+	perm[name] = permissions
+	permout, err := json.Marshal(perm)
+	if err != nil {
+		return err
+	}
+	_, _, err = sc.selectiveLoggingAndUpd([]string{`columns`}, []interface{}{string(permout)},
+		tables, []string{`name`}, []string{tableName}, !sc.VDE)
+	return err
 }

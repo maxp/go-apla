@@ -412,5 +412,33 @@ func ConditionById(table string, validate bool) {
     action {
         PermTable($Name, $Permissions )
     }
+}', 'ContractConditions(`MainCondition`)'),
+('17','contract NewColumn {
+    data {
+    	TableName   string
+	    Name        string
+	    Type        string
+	    Permissions string
+	    Index       string "optional"
+    }
+    conditions {
+        ColumnCondition($TableName, $Name, $Type, $Permissions, $Index)
+    }
+    action {
+        CreateColumn($TableName, $Name, $Type, $Permissions, $Index)
+    }
+}', 'ContractConditions(`MainCondition`)'),
+('18','contract EditColumn {
+    data {
+    	TableName   string
+	    Name        string
+	    Permissions string
+    }
+    conditions {
+        ColumnCondition($TableName, $Name, ``, $Permissions, ``)
+    }
+    action {
+        PermColumn($TableName, $Name, $Permissions)
+    }
 }', 'ContractConditions(`MainCondition`)');
 
