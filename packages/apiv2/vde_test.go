@@ -177,3 +177,45 @@ func TestVDECreate(t *testing.T) {
 
 	fmt.Println(`OK`)
 }
+
+func TestVDEParams(t *testing.T) {
+	if err := keyLogin(1); err != nil {
+		t.Error(err)
+		return
+	}
+	rnd := `rnd` + crypto.RandSeq(6)
+	form := url.Values{`Name`: {rnd}, `Value`: {`Test value`}, `Conditions`: {`ContractConditions("MainCondition")`},
+		`vde`: {`true`}}
+	if _, _, err := postTxResult(`NewParameter`, &form); err != nil {
+		t.Error(err)
+		return
+	}
+
+	var ret ecosystemParamsResult
+	err := sendGet(`ecosystemparams?vde=true`, nil, &ret)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if len(ret.List) < 5 {
+		t.Error(fmt.Errorf(`wrong count of parameters %d`, len(ret.List)))
+	}
+	err = sendGet(`ecosystemparams?vde=true&names=stylesheet,`+rnd, nil, &ret)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if len(ret.List) != 2 {
+		t.Error(fmt.Errorf(`wrong count of parameters %d`, len(ret.List)))
+	}
+	var parValue paramValue
+	err = sendGet(`ecosystemparam/`+rnd+`?vde=true`, nil, &parValue)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if parValue.Name != rnd {
+		t.Error(fmt.Errorf(`wrong value of parameter`))
+	}
+	//	t.Error(`OK`)
+}

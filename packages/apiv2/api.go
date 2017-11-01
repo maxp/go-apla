@@ -191,7 +191,8 @@ func DefaultHandler(params map[string]int, handlers ...apiHandle) hr.Handle {
 		for _, par := range ps {
 			data.params[par.Key] = par.Value
 		}
-		if len(r.FormValue(`vde`)) > 0 {
+		vde := r.FormValue(`vde`)
+		if vde == `1` || vde == `true` {
 			data.vm = smart.GetVM(true, data.state)
 			if data.vm == nil {
 				errorAPI(w, `E_VDE`, http.StatusBadRequest, data.state)
@@ -235,17 +236,21 @@ func DefaultHandler(params map[string]int, handlers ...apiHandle) hr.Handle {
 	})
 }
 
-func checkEcosystem(w http.ResponseWriter, data *apiData) (int64, error) {
+func checkEcosystem(w http.ResponseWriter, data *apiData) (int64, string, error) {
 	state := data.state
 	if data.params[`ecosystem`].(int64) > 0 {
 		state = data.params[`ecosystem`].(int64)
 		count, err := model.GetNextID(`system_states`)
 		if err != nil {
-			return 0, errorAPI(w, err, http.StatusBadRequest)
+			return 0, ``, errorAPI(w, err, http.StatusBadRequest)
 		}
 		if state >= count {
-			return 0, errorAPI(w, `E_ECOSYSTEM`, http.StatusBadRequest, state)
+			return 0, ``, errorAPI(w, `E_ECOSYSTEM`, http.StatusBadRequest, state)
 		}
 	}
-	return state, nil
+	prefix := converter.Int64ToStr(state)
+	if data.vde {
+		prefix += `_vde`
+	}
+	return state, prefix, nil
 }

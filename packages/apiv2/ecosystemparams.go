@@ -20,7 +20,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/AplaProject/go-apla/packages/converter"
 	"github.com/AplaProject/go-apla/packages/model"
 )
 
@@ -39,12 +38,12 @@ func ecosystemParams(w http.ResponseWriter, r *http.Request, data *apiData) (err
 		result ecosystemParamsResult
 		names  map[string]bool
 	)
-	state, err := checkEcosystem(w, data)
+	_, prefix, err := checkEcosystem(w, data)
 	if err != nil {
 		return err
 	}
 	sp := &model.StateParameter{}
-	list, err := sp.SetTablePrefix(converter.Int64ToStr(state)).GetAllStateParameters()
+	list, err := sp.SetTablePrefix(prefix).GetAllStateParameters()
 	result.List = make([]paramValue, 0)
 	if len(data.params[`names`].(string)) > 0 {
 		names = make(map[string]bool)

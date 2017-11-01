@@ -19,17 +19,16 @@ package apiv2
 import (
 	"net/http"
 
-	"github.com/AplaProject/go-apla/packages/converter"
 	"github.com/AplaProject/go-apla/packages/model"
 )
 
 func ecosystemParam(w http.ResponseWriter, r *http.Request, data *apiData) (err error) {
-	state, err := checkEcosystem(w, data)
+	_, prefix, err := checkEcosystem(w, data)
 	if err != nil {
 		return err
 	}
 	sp := &model.StateParameter{}
-	err = sp.SetTablePrefix(converter.Int64ToStr(state)).GetByName(data.params[`name`].(string))
+	err = sp.SetTablePrefix(prefix).GetByName(data.params[`name`].(string))
 	if err != nil {
 		return errorAPI(w, err, http.StatusBadRequest)
 	}
