@@ -55,6 +55,7 @@ var (
 		"DBUpdate": struct{}{},
 	}
 	extendCost = map[string]int64{
+		"AddressToId":        10,
 		"ColumnCondition":    50,
 		"CompileContract":    100,
 		"ContractAccess":     50,
@@ -65,6 +66,7 @@ var (
 		"EcosystemParam":     10,
 		"Eval":               10,
 		"FlushContract":      50,
+		"IdToAddress":        10,
 		"IsContract":         10,
 		"Len":                5,
 		"PermColumn":         50,
@@ -83,6 +85,7 @@ func getCost(name string) int64 {
 
 func EmbedFuncs(vm *script.VM) {
 	vmExtend(vm, &script.ExtendData{Objects: map[string]interface{}{
+		"AddressToId":        AddressToID,
 		"ColumnCondition":    ColumnCondition,
 		"CompileContract":    CompileContract,
 		"ContractAccess":     ContractAccess,
@@ -96,6 +99,7 @@ func EmbedFuncs(vm *script.VM) {
 		"EcosystemParam":     EcosystemParam,
 		"Eval":               Eval,
 		"FlushContract":      FlushContract,
+		"IdToAddress":        IDToAddress,
 		"IsContract":         IsContract,
 		"Len":                Len,
 		"PermColumn":         PermColumn,
@@ -734,4 +738,33 @@ func PermColumn(sc *SmartContract, tableName, name, permissions string) error {
 	_, _, err = sc.selectiveLoggingAndUpd([]string{`columns`}, []interface{}{string(permout)},
 		tables, []string{`name`}, []string{tableName}, !sc.VDE)
 	return err
+}
+
+// AddressToID converts the string representation of the wallet number to a numeric
+func AddressToID(input string) (addr int64) {
+	input = strings.TrimSpace(input)
+	if len(input) < 2 {
+		return 0
+	}
+	if input[0] == '-' {
+		addr, _ = strconv.ParseInt(input, 10, 64)
+	} else if strings.Count(input, `-`) == 4 {
+		addr = converter.StringToAddress(input)
+	} else {
+		uaddr, _ := strconv.ParseUint(input, 10, 64)
+		addr = int64(uaddr)
+	}
+	if !converter.IsValidAddress(converter.AddressToString(addr)) {
+		return 0
+	}
+	return
+}
+
+// IDToAddress converts the identifier of account to a string of the form XXXX -...- XXXX
+func IDToAddress(id int64) (out string) {
+	out = converter.AddressToString(id)
+	if !converter.IsValidAddress(out) {
+		out = `invalid`
+	}
+	return
 }
