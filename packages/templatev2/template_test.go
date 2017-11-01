@@ -43,8 +43,8 @@ var forTest = tplList{
 		`[{"tag":"imageinput","attr":{"name":"myimg","ratio":"40","width":"100"}}]`},
 	{`LinkPage(My page,mypage)`,
 		`[{"tag":"linkpage","attr":{"page":"mypage"},"children":[{"tag":"text","text":"My page"}]}]`},
-	{`Image(/images/myimage.jpg,My photo,myclass)`,
-		`[{"tag":"image","attr":{"alt":"My photo","class":"myclass","src":"/images/myimage.jpg"}}]`},
+	{`Image(/images/myimage.jpg,My photo,myclass).Style(width:100px;)`,
+		`[{"tag":"image","attr":{"alt":"My photo","class":"myclass","src":"/images/myimage.jpg","style":"width:100px;"}}]`},
 	{`Data(mysrc,"id,name",
 		"1",John Silver,2
 		2,"Mark, Smith"

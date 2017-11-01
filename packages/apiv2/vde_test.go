@@ -217,5 +217,15 @@ func TestVDEParams(t *testing.T) {
 	if parValue.Name != rnd {
 		t.Error(fmt.Errorf(`wrong value of parameter`))
 	}
-	//	t.Error(`OK`)
+	var tblResult tablesResult
+	err = sendGet(`tables?vde=true`, nil, &tblResult)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if tblResult.Count < 5 {
+		t.Error(fmt.Errorf(`wrong tables result`))
+	}
+	fmt.Println(tblResult)
+	t.Error(`OK`)
 }
