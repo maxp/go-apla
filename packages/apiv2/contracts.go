@@ -34,7 +34,7 @@ type contractsResult struct {
 func getContracts(w http.ResponseWriter, r *http.Request, data *apiData) (err error) {
 	var limit int
 
-	table := fmt.Sprintf(`%d_contracts`, data.state)
+	table := getPrefix(data) + `_contracts`
 
 	count, err := model.GetNextID(table)
 	if err != nil {

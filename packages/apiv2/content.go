@@ -44,7 +44,7 @@ func initVars(r *http.Request, data *apiData) *map[string]string {
 
 func getPage(w http.ResponseWriter, r *http.Request, data *apiData) error {
 
-	query := `SELECT value,menu FROM "` + converter.Int64ToStr(data.state) + `_pages" WHERE name = ?`
+	query := `SELECT value,menu FROM "` + getPrefix(data) + `_pages" WHERE name = ?`
 	pattern, err := model.GetOneRow(query, data.params[`name`].(string)).String()
 	if err != nil {
 		return err
@@ -54,7 +54,7 @@ func getPage(w http.ResponseWriter, r *http.Request, data *apiData) error {
 	}
 	ret := templatev2.Template2JSON(pattern[`value`], false, initVars(r, data))
 
-	menu, err := model.Single(`SELECT value FROM "`+converter.Int64ToStr(data.state)+
+	menu, err := model.Single(`SELECT value FROM "`+getPrefix(data)+
 		`_menu" WHERE name = ?`, pattern[`menu`]).String()
 	retmenu := templatev2.Template2JSON(menu, false, initVars(r, data))
 
@@ -63,7 +63,7 @@ func getPage(w http.ResponseWriter, r *http.Request, data *apiData) error {
 }
 
 func getMenu(w http.ResponseWriter, r *http.Request, data *apiData) error {
-	query := `SELECT value, title FROM "` + converter.Int64ToStr(data.state) + `_menu" WHERE name = ?`
+	query := `SELECT value, title FROM "` + getPrefix(data) + `_menu" WHERE name = ?`
 	pattern, err := model.GetOneRow(query, data.params[`name`].(string)).String()
 	if err != nil {
 		return errorAPI(w, err, http.StatusBadRequest)

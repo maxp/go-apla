@@ -267,6 +267,55 @@ func TestVDEParams(t *testing.T) {
 		t.Error(`wrong row result`)
 		return
 	}
-	fmt.Println(retRow)
+	var retCont contractsResult
+	err = sendGet(`contracts?vde=true`, nil, &retCont)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	form = url.Values{`Value`: {`contract ` + rnd + ` {
+		data {
+			Par string
+		}
+		action { Test("active",  $Par)}}`}, `Conditions`: {`ContractConditions("MainCondition")`}, `vde`: {`true`}}
+
+	if _, _, err = postTxResult(`NewContract`, &form); err != nil {
+		t.Error(err)
+		return
+	}
+	var cont getContractResult
+	err = sendGet(`contract/`+rnd+`?vde=true`, nil, &cont)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if !strings.HasSuffix(cont.Name, rnd) {
+		t.Error(`wrong contract result`)
+		return
+	}
+
+	form = url.Values{"Name": {rnd}, "Value": {`Page`}, "Menu": {`government`},
+		"Conditions": {`true`}, `vde`: {`1`}}
+	err = postTx(`NewPage`, &form)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	err = sendPost(`content/page/`+rnd, &url.Values{`vde`: {`true`}}, &ret)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	form = url.Values{"Name": {rnd}, "Value": {`Menu`}, "Conditions": {`true`}, `vde`: {`1`}}
+	err = postTx(`NewMenu`, &form)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	err = sendPost(`content/menu/`+rnd, &url.Values{`vde`: {`true`}}, &ret)
+	if err != nil {
+		t.Error(err)
+		return
+	}
 	//	t.Error(`OK`)
 }
