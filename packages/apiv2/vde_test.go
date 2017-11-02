@@ -19,6 +19,7 @@ package apiv2
 import (
 	"fmt"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/AplaProject/go-apla/packages/converter"
@@ -226,6 +227,46 @@ func TestVDEParams(t *testing.T) {
 	if tblResult.Count < 5 {
 		t.Error(fmt.Errorf(`wrong tables result`))
 	}
-	fmt.Println(tblResult)
-	t.Error(`OK`)
+	form = url.Values{"Name": {rnd}, `vde`: {`1`}, "Columns": {`[{"name":"MyName","type":"varchar", "index": "1",
+		"conditions":"true"},
+	  {"name":"Amount", "type":"number","index": "0", "conditions":"true"},
+	  {"name":"Active", "type":"character","index": "0", "conditions":"true"}]`},
+		"Permissions": {`{"insert": "true", "update" : "true", "new_column": "true"}`}}
+	err = postTx(`NewTable`, &form)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	var tResult tableResult
+	err = sendGet(`table/`+rnd+`?vde=true`, nil, &tResult)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if tResult.Name != rnd {
+		t.Error(fmt.Errorf(`wrong table result`))
+		return
+	}
+	var retList listResult
+	err = sendGet(`list/contracts?vde=true`, nil, &retList)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if converter.StrToInt64(retList.Count) < 7 {
+		t.Error(fmt.Errorf(`The number of records %s < 7`, retList.Count))
+		return
+	}
+	var retRow rowResult
+	err = sendGet(`row/contracts/2?vde=true`, nil, &retRow)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if !strings.Contains(retRow.Value[`value`], `VDEFunctions`) {
+		t.Error(`wrong row result`)
+		return
+	}
+	fmt.Println(retRow)
+	//	t.Error(`OK`)
 }
