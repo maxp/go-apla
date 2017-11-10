@@ -68,43 +68,44 @@ var (
 		"FindEcosystem":  struct{}{},
 	}
 	extendCost = map[string]int64{
-		"AddressToId":       10,
-		"IdToAddress":       10,
-		"NewState":          1000, // ?? What cost must be?
-		"Sha256":            50,
-		"PubToID":           10,
-		"StateVal":          10,
-		"SysParamString":    10,
-		"SysParamInt":       10,
-		"SysCost":           10,
-		"SysFuel":           10,
-		"ValidateCondition": 30,
-		"PrefixTable":       10,
-		"EvalCondition":     20,
-		"HasPrefix":         10,
-		"Contains":          10,
-		"Replace":           10,
-		"Join":              10,
-		"UpdateLang":        10,
-		"Size":              10,
-		"Substr":            10,
-		"ContractsList":     10,
-		"IsContract":        10,
-		"CompileContract":   100,
-		"FlushContract":     50,
-		"Eval":              10,
-		"Activate":          10,
-		"CreateEcosystem":   100,
-		"RollbackEcosystem": 100,
-		"TableConditions":   100,
-		"CreateTable":       100,
-		"RollbackTable":     100,
-		"PermTable":         100,
-		"ColumnCondition":   50,
-		"CreateColumn":      50,
-		"RollbackColumn":    50,
-		"PermColumn":        50,
-		"JSONToMap":         50,
+		"AddressToId":        10,
+		"IdToAddress":        10,
+		"NewState":           1000, // ?? What cost must be?
+		"Sha256":             50,
+		"PubToID":            10,
+		"StateVal":           10,
+		"SysParamString":     10,
+		"SysParamInt":        10,
+		"SysCost":            10,
+		"SysFuel":            10,
+		"ValidateCondition":  30,
+		"PrefixTable":        10,
+		"EvalCondition":      20,
+		"HasPrefix":          10,
+		"Contains":           10,
+		"Replace":            10,
+		"Join":               10,
+		"UpdateLang":         10,
+		"Size":               10,
+		"Substr":             10,
+		"ContractsList":      10,
+		"IsContract":         10,
+		"CompileContract":    100,
+		"FlushContract":      50,
+		"Eval":               10,
+		"Activate":           10,
+		"CreateEcosystem":    100,
+		"RollbackEcosystem":  100,
+		"TableConditions":    100,
+		"CreateTable":        100,
+		"RollbackTable":      100,
+		"PermTable":          100,
+		"ContractConditions": 100,
+		"ColumnCondition":    50,
+		"CreateColumn":       50,
+		"RollbackColumn":     50,
+		"PermColumn":         50,
+		"JSONToMap":          50,
 	}
 )
 
@@ -785,12 +786,6 @@ func (p *Parser) EvalIf(conditions string) (bool, error) {
 	if p.TxSmart != nil {
 		time = p.TxSmart.Time
 	}
-	/*	if p.TxPtr != nil {
-		switch val := p.TxPtr.(type) {
-		case *consts.TXHeader:
-			time = int64(val.Time)
-		}
-	}*/
 	blockTime := int64(0)
 	if p.BlockData != nil {
 		blockTime = p.BlockData.Time
@@ -1015,6 +1010,11 @@ func DBSelect(p *Parser, tblname string, columns string, id int64, order string,
 	if tblname[0] < '1' || tblname[0] > '9' || !strings.Contains(tblname, `_`) {
 		tblname = fmt.Sprintf(`%d_%s`, ecosystem, tblname)
 	}
+	access := map[string]interface{}{`table`: tblname, `columns`: columns,
+		`access`: `read`, `key_id`: p.TxSmart.KeyID, `parser`: p}
+	if err = smart.Access(&access); err != nil {
+		return 0, nil, err
+	}
 	rows, err = model.DBConn.Table(tblname).Select(columns).Where(where, params...).Order(order).
 		Offset(offset).Limit(limit).Rows()
 	if err != nil {
@@ -1045,6 +1045,12 @@ func DBSelect(p *Parser, tblname string, columns string, id int64, order string,
 			row[cols[i]] = value
 		}
 		result = append(result, reflect.ValueOf(row).Interface())
+	}
+	access[`columns`] = cols
+	access[`data`] = &result
+	access[`access`] = `data`
+	if err = smart.Access(&access); err != nil {
+		return 0, nil, err
 	}
 	return 0, result, nil
 }
@@ -1363,11 +1369,11 @@ func TableConditions(p *Parser, name, columns, permissions string) (err error) {
 	if err != nil {
 		return
 	}
-	if len(perm) != 3 {
+	if len(perm) < 3 {
 		return fmt.Errorf(`Permissions must contain "insert", "new_column", "update"`)
 	}
-	for _, v := range []string{`insert`, `update`, `new_column`} {
-		if len(perm[v]) == 0 {
+	for _, v := range []string{`insert`, `update`, `new_column`, `read`} {
+		if len(perm[v]) == 0 && v != `read` {
 			return fmt.Errorf(`%v condition is empty`, v)
 		}
 		if err = smart.CompileEval(perm[v], uint32(p.TxSmart.EcosystemID)); err != nil {
@@ -1504,7 +1510,7 @@ func CreateTable(p *Parser, name string, columns, permissions string) error {
 	if err != nil {
 		return err
 	}
-	for _, v := range []string{`insert`, `update`, `new_column`} {
+	for _, v := range []string{`insert`, `update`, `new_column`, `read`} {
 		permlist[v] = perm[v]
 	}
 	permout, err := json.Marshal(permlist)
@@ -1548,7 +1554,7 @@ func PermTable(p *Parser, name, permissions string) error {
 	if err != nil {
 		return err
 	}
-	for _, v := range []string{`insert`, `update`, `new_column`} {
+	for _, v := range []string{`insert`, `update`, `new_column`, `read`} {
 		permlist[v] = perm[v]
 	}
 	permout, err := json.Marshal(permlist)

@@ -298,3 +298,64 @@ func LoadContract(transaction *model.DbTransaction, prefix string) (err error) {
 	}
 	return
 }
+
+func Access(params *map[string]interface{}) (err error) {
+	var (
+		vde, prefix string
+		ret         bool
+	)
+
+	table := (*params)[`table`].(string)
+	if table[0] >= '0' && table[0] <= '9' {
+		if off := strings.IndexByte(table, '_'); off > 0 {
+			prefix = table[:off]
+			if strings.HasPrefix(table[off+1:], `vde_`) {
+				vde = `_vde`
+			}
+			table = table[off+1+len(vde):]
+		}
+	}
+	if len(prefix) == 0 {
+		return
+	}
+	if _, ok := (*params)[`access_condition`]; !ok {
+		tables := &model.Table{}
+		tables.SetTablePrefix(prefix + vde)
+		tablePermission, err := tables.GetPermissions(table, "")
+		if err != nil {
+			return err
+		}
+		(*params)[`access_condition`] = tablePermission[`read`]
+	}
+	if len((*params)[`access_condition`].(string)) > 0 {
+		ecosystem := converter.StrToInt64(prefix)
+		ext := map[string]interface{}{`ecosystem_id`: ecosystem,
+			`key_id`: (*params)[`key_id`], `parser`: (*params)[`parser`],
+			`block_time`: 0, `time`: 0}
+		if len(vde) > 0 {
+			ext[`vde`] = true
+		}
+		ext[`access`] = (*params)[`access`].(string)
+		ext[`table`] = (*params)[`table`].(string)
+		switch v := (*params)[`columns`].(type) {
+		case string:
+			ext[`columns`] = strings.Split(v, `,`)
+		default:
+			ext[`columns`] = v
+		}
+		if ext[`access`] == `data` {
+			ext[`data`] = (*params)[`data`] //).(*[]map[string]string)
+		}
+		ret, err = EvalIf((*params)[`access_condition`].(string), uint32(ecosystem), &ext)
+		if err != nil {
+			return err
+		}
+		if !ret {
+			err = fmt.Errorf(`Access denied`)
+		}
+		if err == nil && ext[`access`] == `data` {
+			(*params)[`data`] = ext[`data`] //.(*[]map[string]string)
+		}
+	}
+	return err
+}

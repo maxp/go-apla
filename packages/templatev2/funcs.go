@@ -28,6 +28,7 @@ import (
 	"github.com/AplaProject/go-apla/packages/converter"
 	"github.com/AplaProject/go-apla/packages/language"
 	"github.com/AplaProject/go-apla/packages/model"
+	"github.com/AplaProject/go-apla/packages/smart"
 )
 
 var (
@@ -361,6 +362,13 @@ func dbfindTag(par parFunc) string {
 		state = converter.StrToInt64((*par.Vars)[`ecosystem_id`])
 	}
 	tblname := fmt.Sprintf(`"%d_%s"`, state, strings.Trim(converter.EscapeName((*par.Pars)[`Name`]), `"`))
+
+	access := map[string]interface{}{`table`: tblname, `columns`: fields,
+		`key_id`: converter.StrToInt64((*par.Vars)[`key_id`])}
+	if err := smart.Access(&access); err != nil {
+		return err.Error()
+	}
+
 	list, err := model.GetAll(`select `+fields+` from `+tblname+where+order, limit)
 	if err != nil {
 		return err.Error()
@@ -372,6 +380,7 @@ func dbfindTag(par parFunc) string {
 	types := make([]string, 0)
 	lencol := 0
 	defcol := 0
+
 	for _, item := range list {
 		if lencol == 0 {
 			for key := range item {
@@ -386,6 +395,12 @@ func dbfindTag(par parFunc) string {
 				}
 			}
 			lencol = len(cols)
+			access[`columns`] = cols
+			access[`data`] = &list
+			access[`access`] = `data`
+			if err = smart.Access(&access); err != nil {
+				return err.Error()
+			}
 		}
 		row := make([]string, lencol)
 		for i, icol := range cols {
@@ -398,6 +413,9 @@ func dbfindTag(par parFunc) string {
 				if ival == `NULL` {
 					ival = ``
 				}
+				if par.Node.Attr[`prefix`] != nil {
+					(*par.Vars)[prefix+`_`+icol] = ival
+				}
 			} else {
 				body := replace(par.Node.Attr[`custombody`].([]string)[i-defcol], 0, &item)
 				root := node{}
@@ -407,13 +425,11 @@ func dbfindTag(par parFunc) string {
 					ival = replace(string(out), 0, &item)
 				}
 			}
-			if par.Node.Attr[`prefix`] != nil {
-				(*par.Vars)[prefix+`_`+icol] = ival
-			}
 			row[i] = ival
 		}
 		data = append(data, row)
 	}
+
 	setAllAttr(par)
 	delete(par.Node.Attr, `customs`)
 	delete(par.Node.Attr, `custombody`)
