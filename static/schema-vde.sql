@@ -128,7 +128,7 @@ INSERT INTO "%[1]d_vde_tables" ("id", "name", "permissions","columns", "conditio
 INSERT INTO "%[1]d_vde_contracts" ("id", "value", "conditions") VALUES 
 ('1','contract MainCondition {
   conditions {
-    if(EcosystemParam("founder_account")!=$wallet)
+    if(EcosystemParam("founder_account")!=$key_id)
     {
       warning "Sorry, you don`t have access to this action."
     }
@@ -163,7 +163,7 @@ func ConditionById(table string, validate bool) {
     }
     Eval(cond)
     if validate {
-        ValidateCondition($Conditions,$state)
+        ValidateCondition($Conditions,$ecosystem_id)
     }
 }', 'ContractConditions(`MainCondition`)'),
 ('3','contract NewContract {
@@ -172,12 +172,12 @@ func ConditionById(table string, validate bool) {
     	Conditions string
     }
     conditions {
-      ValidateCondition($Conditions,$state)
+      ValidateCondition($Conditions,$ecosystem_id)
 	    var list array
 	    list = ContractsList($Value)
 	    var i int
 	    while i < Len(list) {
-	        if IsContract(list[i], $state) {
+	        if IsContract(list[i], $ecosystem_id) {
 	            warning Sprintf(`Contract %%s exists`, list[i] )
 	        }
 	        i = i + 1
@@ -185,7 +185,7 @@ func ConditionById(table string, validate bool) {
     }
     action {
         var root, id int
-        root = CompileContract($Value, $state, 0, 0)
+        root = CompileContract($Value, $ecosystem_id, 0, 0)
         id = DBInsert(`contracts`, `value,conditions`, $Value, $Conditions )
         FlushContract(root, id, false)
         $result = id
@@ -205,7 +205,7 @@ func ConditionById(table string, validate bool) {
         }
         $cur = row[0]
         Eval($cur[`conditions`])
-        ValidateCondition($Conditions,$state)
+        ValidateCondition($Conditions,$ecosystem_id)
 	    var list, curlist array
 	    list = ContractsList($Value)
 	    curlist = ContractsList($cur[`value`])
@@ -231,7 +231,7 @@ func ConditionById(table string, validate bool) {
     }
     action {
         var root int
-        root = CompileContract($Value, $state, 0, 0)
+        root = CompileContract($Value, $ecosystem_id, 0, 0)
         DBUpdate(`contracts`, $Id, `value,conditions`, $Value, $Conditions)
         FlushContract(root, $Id, false)
     }
@@ -244,7 +244,7 @@ func ConditionById(table string, validate bool) {
     }
     conditions {
         var ret array
-        ValidateCondition($Conditions, $state)
+        ValidateCondition($Conditions, $ecosystem_id)
         ret = DBFind(`parameters`).Columns(`id`).Where(`name=?`, $Name).Limit(1)
         if Len(ret) > 0 {
             warning Sprintf( `Parameter %%s already exists`, $Name)
@@ -276,7 +276,7 @@ func ConditionById(table string, validate bool) {
     }
     conditions {
         var ret int
-        ValidateCondition($Conditions,$state)
+        ValidateCondition($Conditions,$ecosystem_id)
         ret = DBFind(`menu`).Columns(`id`).Where(`name=?`, $Name).Limit(1)
         if Len(ret) > 0 {
             warning Sprintf( `Menu %%s already exists`, $Name)
@@ -321,7 +321,7 @@ func ConditionById(table string, validate bool) {
     }
     conditions {
         var ret int
-        ValidateCondition($Conditions,$state)
+        ValidateCondition($Conditions,$ecosystem_id)
         ret = DBFind(`pages`).Columns(`id`).Where(`name=?`, $Name).Limit(1)
         if Len(ret) > 0 {
             warning Sprintf( `Page %%s already exists`, $Name)
@@ -365,7 +365,7 @@ func ConditionById(table string, validate bool) {
     }
     conditions {
         var ret int
-        ValidateCondition($Conditions,$state)
+        ValidateCondition($Conditions,$ecosystem_id)
         ret = DBFind(`blocks`).Columns(`id`).Where(`name=?`, $Name).Limit(1)
         if Len(ret) > 0 {
             warning Sprintf( `Block %%s already exists`, $Name)

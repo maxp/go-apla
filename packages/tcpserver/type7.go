@@ -17,17 +17,27 @@
 package tcpserver
 
 import (
+	"errors"
+
+	"github.com/AplaProject/go-apla/packages/consts"
 	"github.com/AplaProject/go-apla/packages/model"
 	"github.com/AplaProject/go-apla/packages/utils"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // Type7 writes the body of the specified block
 // blocksCollection and queue_parser_blocks daemons send the request through p.GetBlocks()
 func Type7(request *GetBodyRequest) (*GetBodyResponse, error) {
 	block := &model.Block{}
-	err := block.GetBlock(int64(request.BlockID))
+	found, err := block.Get(int64(request.BlockID))
 	if err != nil {
+		log.WithFields(log.Fields{"type": consts.DBError, "error": err, "block_id": request.BlockID}).Error("Error getting block with id")
 		return nil, utils.ErrInfo(err)
+	}
+	if !found {
+		log.WithFields(log.Fields{"type": consts.NotFound, "block_id": request.BlockID}).Error("block with id not found")
+		return nil, errors.New("Block not found. ID: " + string(request.BlockID))
 	}
 	return &GetBodyResponse{Data: block.Data}, nil
 }

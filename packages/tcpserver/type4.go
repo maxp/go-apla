@@ -17,7 +17,10 @@
 package tcpserver
 
 import (
+	"github.com/AplaProject/go-apla/packages/consts"
 	"github.com/AplaProject/go-apla/packages/model"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // Type4 writes the hash of the specified block
@@ -25,12 +28,17 @@ import (
 func Type4(r *ConfirmRequest) (*ConfirmResponse, error) {
 	resp := &ConfirmResponse{}
 	block := &model.Block{}
-	err := block.GetBlock(int64(r.BlockID))
-	if err != nil || len(block.Hash) == 0 {
+	found, err := block.Get(int64(r.BlockID))
+	if err != nil || !found {
 		hash := [32]byte{}
 		resp.Hash = hash[:]
 	} else {
 		resp.Hash = block.Hash // can we send binary data ?
+	}
+	if err != nil {
+		log.WithFields(log.Fields{"type": consts.DBError, "error": err, "block_id": r.BlockID}).Error("Getting block")
+	} else if len(block.Hash) == 0 {
+		log.WithFields(log.Fields{"type": consts.DBError, "block_id": r.BlockID}).Warning("Block wih id not found")
 	}
 	return resp, nil
 }
